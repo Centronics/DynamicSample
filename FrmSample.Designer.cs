@@ -29,103 +29,83 @@
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            this.btnSave = new System.Windows.Forms.Button();
-            this.btnRefresh = new System.Windows.Forms.Button();
-            this.btnStart = new System.Windows.Forms.Button();
             this.pbDraw = new System.Windows.Forms.PictureBox();
             this.tmrWork = new System.Windows.Forms.Timer(this.components);
-            this.lblWorking = new System.Windows.Forms.Label();
+            this.btnSaveXp = new System.Windows.Forms.Button();
+            this.btnLoadXp = new System.Windows.Forms.Button();
+            this.btnNewGame = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.pbDraw)).BeginInit();
             this.SuspendLayout();
             // 
-            // btnSave
-            // 
-            this.btnSave.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnSave.Location = new System.Drawing.Point(452, 548);
-            this.btnSave.Name = "btnSave";
-            this.btnSave.Size = new System.Drawing.Size(75, 23);
-            this.btnSave.TabIndex = 0;
-            this.btnSave.Text = "Сохранить";
-            this.btnSave.UseVisualStyleBackColor = true;
-            // 
-            // btnRefresh
-            // 
-            this.btnRefresh.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnRefresh.Location = new System.Drawing.Point(533, 548);
-            this.btnRefresh.Name = "btnRefresh";
-            this.btnRefresh.Size = new System.Drawing.Size(75, 23);
-            this.btnRefresh.TabIndex = 1;
-            this.btnRefresh.Text = "Обновить";
-            this.btnRefresh.UseVisualStyleBackColor = true;
-            this.btnRefresh.Click += new System.EventHandler(this.BtnRefresh_Click);
-            // 
-            // btnStart
-            // 
-            this.btnStart.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnStart.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
-            this.btnStart.Location = new System.Drawing.Point(841, 548);
-            this.btnStart.Name = "btnStart";
-            this.btnStart.Size = new System.Drawing.Size(75, 23);
-            this.btnStart.TabIndex = 2;
-            this.btnStart.Text = "Запуск";
-            this.btnStart.UseVisualStyleBackColor = true;
-            // 
             // pbDraw
             // 
-            this.pbDraw.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.pbDraw.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.pbDraw.Location = new System.Drawing.Point(12, 12);
             this.pbDraw.Name = "pbDraw";
-            this.pbDraw.Size = new System.Drawing.Size(904, 530);
+            this.pbDraw.Size = new System.Drawing.Size(483, 483);
             this.pbDraw.TabIndex = 3;
             this.pbDraw.TabStop = false;
+            this.pbDraw.MouseUp += new System.Windows.Forms.MouseEventHandler(this.pbDraw_MouseUp);
             // 
             // tmrWork
             // 
             this.tmrWork.Interval = 1000;
             // 
-            // lblWorking
+            // btnSaveXp
             // 
-            this.lblWorking.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.lblWorking.AutoSize = true;
-            this.lblWorking.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
-            this.lblWorking.Location = new System.Drawing.Point(690, 552);
-            this.lblWorking.Name = "lblWorking";
-            this.lblWorking.Size = new System.Drawing.Size(63, 16);
-            this.lblWorking.TabIndex = 4;
-            this.lblWorking.Text = "00:00:00";
+            this.btnSaveXp.Location = new System.Drawing.Point(12, 501);
+            this.btnSaveXp.Name = "btnSaveXp";
+            this.btnSaveXp.Size = new System.Drawing.Size(234, 23);
+            this.btnSaveXp.TabIndex = 4;
+            this.btnSaveXp.Text = "Сохранить опыт";
+            this.btnSaveXp.UseVisualStyleBackColor = true;
+            // 
+            // btnLoadXp
+            // 
+            this.btnLoadXp.Location = new System.Drawing.Point(261, 501);
+            this.btnLoadXp.Name = "btnLoadXp";
+            this.btnLoadXp.Size = new System.Drawing.Size(234, 23);
+            this.btnLoadXp.TabIndex = 5;
+            this.btnLoadXp.Text = "Загрузить опыт";
+            this.btnLoadXp.UseVisualStyleBackColor = true;
+            // 
+            // btnNewGame
+            // 
+            this.btnNewGame.Location = new System.Drawing.Point(12, 530);
+            this.btnNewGame.Name = "btnNewGame";
+            this.btnNewGame.Size = new System.Drawing.Size(483, 23);
+            this.btnNewGame.TabIndex = 6;
+            this.btnNewGame.Text = "Новая игра";
+            this.btnNewGame.UseVisualStyleBackColor = true;
+            this.btnNewGame.Click += new System.EventHandler(this.btnNewGame_Click);
             // 
             // FrmSample
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(928, 583);
-            this.Controls.Add(this.lblWorking);
+            this.ClientSize = new System.Drawing.Size(506, 558);
+            this.Controls.Add(this.btnNewGame);
+            this.Controls.Add(this.btnLoadXp);
+            this.Controls.Add(this.btnSaveXp);
             this.Controls.Add(this.pbDraw);
-            this.Controls.Add(this.btnStart);
-            this.Controls.Add(this.btnRefresh);
-            this.Controls.Add(this.btnSave);
-            this.MaximumSize = new System.Drawing.Size(1920, 1080);
-            this.MinimumSize = new System.Drawing.Size(10, 10);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            this.MaximizeBox = false;
+            this.MinimumSize = new System.Drawing.Size(366, 150);
             this.Name = "FrmSample";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "FrmSample";
             this.Shown += new System.EventHandler(this.FrmSample_Shown);
             ((System.ComponentModel.ISupportInitialize)(this.pbDraw)).EndInit();
             this.ResumeLayout(false);
-            this.PerformLayout();
 
         }
 
         #endregion
-
-        private System.Windows.Forms.Button btnSave;
-        private System.Windows.Forms.Button btnRefresh;
-        private System.Windows.Forms.Button btnStart;
         private System.Windows.Forms.PictureBox pbDraw;
         private System.Windows.Forms.Timer tmrWork;
-        private System.Windows.Forms.Label lblWorking;
+        private System.Windows.Forms.Button btnSaveXp;
+        private System.Windows.Forms.Button btnLoadXp;
+        private System.Windows.Forms.Button btnNewGame;
     }
 }
 

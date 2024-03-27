@@ -784,7 +784,7 @@ namespace DynamicSample
             IEnumerable<Processor> result = IntAdd().ToList();
 
             if (!LongOperationsAllowed)
-                return new Processor[0];
+                return Array.Empty<Processor>();
 
             int count = lstExceptions.Count;
 

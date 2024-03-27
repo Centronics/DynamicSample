@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
+using DynamicMosaic;
 using DynamicParser;
 
 namespace DynamicSample
@@ -280,6 +283,40 @@ namespace DynamicSample
 
             if (needReplace)
                 SelectedPath = fullPath;
+        }
+
+        public IEnumerable<List<Processor>> ElementGroups
+        {
+            get
+            {
+                SortedDictionary<ulong, List<Processor>> groups = new SortedDictionary<ulong, List<Processor>>();
+
+                foreach (Processor p in Elements)
+                {
+                    if (p.Tag[0] != '(')
+                        continue;
+
+                    int k = p.Tag.IndexOf(')');
+
+                    if (k < 0)
+                        continue;
+
+                    if (!ulong.TryParse(p.Tag.Substring(1, k - 1), out ulong groupNumber))
+                        continue;
+
+                    if (++k >= p.Tag.Length)
+                        continue;
+
+                    Processor np = ProcessorHandler.ChangeProcessorTag(p, p.Tag.Substring(k));
+
+                    if (groups.TryGetValue(groupNumber, out List<Processor> lst))
+                        lst.Add(np);
+                    else
+                        groups.Add(groupNumber, new List<Processor> { np });
+                }
+
+                return groups.Values;
+            }
         }
     }
 }
