@@ -595,9 +595,11 @@ namespace DynamicSample
         /// </remarks>
         static string ReplaceInvalidPathChars(string path)
         {
-            return string.IsNullOrEmpty(path)
-                ? string.Empty
-                : FrmSample.InvalidCharSet.Aggregate(path, (current, c) => current.Replace(c, '_'));
+            return string.Empty;
+
+            //return string.IsNullOrEmpty(path)
+            //    ? string.Empty
+            //    : FrmSample.InvalidCharSet.Aggregate(path, (current, c) => current.Replace(c, '_'));
         }
 
         /// <summary>
@@ -917,9 +919,9 @@ namespace DynamicSample
                 throw new ArgumentNullException(nameof(btm),
                     $@"{nameof(CheckBitmapByAlphaColor)}: Изображение должно быть указано.");
 
-            for (int y = 0; y < btm.Height; y++)
-            for (int x = 0; x < btm.Width; x++)
-                FrmSample.CheckAlphaColor(btm.GetPixel(x, y));
+            //for (int y = 0; y < btm.Height; y++)
+            //for (int x = 0; x < btm.Width; x++)
+            //    FrmSample.CheckAlphaColor(btm.GetPixel(x, y));
 
             return btm;
         }
