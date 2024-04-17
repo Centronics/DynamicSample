@@ -16,7 +16,7 @@ namespace DynamicSample
 
         HitCreator _currentSession;
 
-        int _lastBotHitX, _lastBotHitY;
+        int _lastBotHitX = -1, _lastBotHitY = -1;
 
         class HitCreator
         {
@@ -40,16 +40,24 @@ namespace DynamicSample
 
             static Winner GetWinner(SignValue[,] p)
             {
-                if (IsLine(UserHit))
-                    return Winner.USER;
+                bool bu = IsLine(UserHit);
+                bool bb = IsLine(BotHit);
 
-                if (IsLine(BotHit))
+                switch (bu)
+                {
+                    case true when bb:
+                        return Winner.STANDOFF;
+                    case true:
+                        return Winner.USER;
+                }
+
+                if (bb)
                     return Winner.BOT;
 
                 for (int y = 0; y < p.GetLength(1); y++)
-                for (int x = 0; x < p.GetLength(0); x++)
-                    if (p[x, y] == EmptySpace)
-                        return Winner.NOBODY;
+                    for (int x = 0; x < p.GetLength(0); x++)
+                        if (p[x, y] == EmptySpace)
+                            return Winner.NOBODY;
 
                 return Winner.STANDOFF;
 
@@ -121,17 +129,21 @@ namespace DynamicSample
 
             (HitCreator hc, bool end) CreateHit(bool isBot, SignValue[,] map, ref uint counter)
             {
-                try
+                bool isStart = map == null;
+
+                if (isStart)
                 {
-                    bool isStart = map == null;
+                    map = MapCopy(_mainProcessor);
+                    counter = 0;
+                }
 
-                    if (isStart)
-                    {
-                        map = MapCopy(_mainProcessor);
-                        counter = 0;
-                    }
+                uint ct = counter;
+                HitCreator lastHc = null;
 
-                    for (; _mainY < map.GetLength(1); _mainY++)
+                counter++;
+
+                for (; _mainY < map.GetLength(1); _mainY++)
+                {
                     for (; _mainX < map.GetLength(0); _mainX++)
                     {
                         if (map[_mainX, _mainY] != EmptySpace)
@@ -140,9 +152,9 @@ namespace DynamicSample
                         HitCreator result = new HitCreator(map)
                         {
                             _mainProcessor =
-                            {
-                                [_mainX, _mainY] = isBot ? BotHit : UserHit
-                            },
+                                {
+                                    [_mainX, _mainY] = isBot ? BotHit : UserHit
+                                },
                             _hitX = _mainX,
                             _hitY = _mainY
                         };
@@ -150,23 +162,61 @@ namespace DynamicSample
                         switch (result.CurrentWinner)
                         {
                             case Winner.BOT:
+                                _mainX++;
                                 return (result, false);
                             case Winner.USER:
                             case Winner.STANDOFF:
+                                _mainX++;
                                 return (null, false);
                             case Winner.NOBODY:
-                                counter++;
-                                return result.CreateHit(!isBot, result._mainProcessor, ref counter);
+                                {
+                                    uint ctMin = uint.MaxValue;
+
+                                    do
+                                    {
+                                        (HitCreator hc, bool end) = result.CreateHit(!isBot, result._mainProcessor, ref counter);
+
+                                        if (end)
+                                        {
+                                            counter = ct;
+                                            break;
+                                        }
+
+                                        if (ctMin > counter)
+                                        {
+                                            if (hc == null)
+                                            {
+                                                counter = ct;
+                                                continue;
+                                            }
+
+                                            ctMin = counter;
+                                            lastHc = hc;
+                                        }
+
+                                        counter = ct;
+
+                                    } while (true);
+
+                                    if (ctMin != uint.MaxValue)
+                                    {
+                                        _mainX++;
+                                        counter = ctMin;
+
+                                        return (lastHc, false);
+                                    }
+
+                                    break;
+                                }
                             default:
                                 throw new ArgumentOutOfRangeException();
                         }
                     }
-                }
-                finally
-                {
-                    _mainY = _mainX = 0;
+
+                    _mainX = 0;
                 }
 
+                counter = ct;
                 return (null, true);
             }
 
@@ -180,17 +230,19 @@ namespace DynamicSample
                     while (true)
                     {
                         uint counter = 0;
-                        (HitCreator hc, bool end) v = CreateHit(true, null, ref counter);
+                        (HitCreator hc, bool end) = CreateHit(true, null, ref counter);
 
-                        if (v.end)
+                        if (end)
                             break;
 
-                        if (v.hc == null || counter >= commonCounter)
+                        if (hc == null || counter >= commonCounter)
                             continue;
 
-                        commonHitCreator = v.hc;
+                        commonHitCreator = hc;
                         commonCounter = counter;
                     }
+
+                    _mainY = _mainX = 0;
 
                     return commonHitCreator?.Processor;
                 }
@@ -283,8 +335,15 @@ namespace DynamicSample
 
             Processor botHit = _currentSession.NextStep;
 
-            int bx = Convert.ToInt32(botHit.Tag[1]);
-            int by = Convert.ToInt32(botHit.Tag[2]);
+            if (botHit == null)
+            {
+                MessageBox.Show(@"Вы выиграли! Не знаю, как ходить!");
+                NewGame();
+                return;
+            }
+
+            int bx = Convert.ToInt32(botHit.Tag[1].ToString());
+            int by = Convert.ToInt32(botHit.Tag[2].ToString());
 
             _currentSession.MakeBotHit(bx, by);
 
@@ -316,8 +375,15 @@ namespace DynamicSample
 
         void NewGame()
         {
-            if (_currentSession == null)
-                _currentSession = new HitCreator(new SignValue[3, 3]);
+            SignValue[,] map = new SignValue[3, 3];
+
+            for (int y = 0; y < map.GetLength(1); y++)
+                for (int x = 0; x < map.GetLength(0); x++)
+                    map[x, y] = EmptySpace;
+
+            _currentSession = new HitCreator(map);
+
+            _lastBotHitY = _lastBotHitX = -1;
 
             Repaint();
         }
