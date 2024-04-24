@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(FrmSample));
             this.pbDraw = new System.Windows.Forms.PictureBox();
             this.tmrWork = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.pbDraw)).BeginInit();
@@ -42,7 +43,7 @@
             this.pbDraw.Size = new System.Drawing.Size(483, 483);
             this.pbDraw.TabIndex = 3;
             this.pbDraw.TabStop = false;
-            this.pbDraw.MouseUp += new System.Windows.Forms.MouseEventHandler(this.PbDraw_MouseUp);
+            this.pbDraw.MouseClick += new System.Windows.Forms.MouseEventHandler(this.PbDraw_MouseClick);
             // 
             // tmrWork
             // 
@@ -55,12 +56,15 @@
             this.ClientSize = new System.Drawing.Size(506, 505);
             this.Controls.Add(this.pbDraw);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.KeyPreview = true;
             this.MaximizeBox = false;
             this.MinimumSize = new System.Drawing.Size(366, 150);
             this.Name = "FrmSample";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "FrmSample";
             this.Shown += new System.EventHandler(this.FrmSample_Shown);
+            this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.FrmSample_KeyDown);
             ((System.ComponentModel.ISupportInitialize)(this.pbDraw)).EndInit();
             this.ResumeLayout(false);
 

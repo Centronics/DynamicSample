@@ -16,7 +16,7 @@ namespace DynamicSample
 
         HitCreator _currentSession;
 
-        int _lastBotHitX = -1, _lastBotHitY = -1;
+        int _lastHitX = -1, _lastHitY = -1;
 
         class HitCreator
         {
@@ -31,7 +31,7 @@ namespace DynamicSample
                 if (map == null)
                     throw new ArgumentNullException(nameof(map));
 
-                _mainProcessor = MapCopy(map);
+                _mainProcessor = MapCopy(map, false);
             }
 
             Processor Processor => new Processor(_mainProcessor, $@"b{_hitX}{_hitY}");
@@ -113,7 +113,7 @@ namespace DynamicSample
                 _mainProcessor[x, y] = BotHit;
             }
 
-            static SignValue[,] MapCopy(SignValue[,] map)
+            static SignValue[,] MapCopy(SignValue[,] map, bool invert)
             {
                 if (map == null)
                     throw new ArgumentNullException(nameof(map));
@@ -122,25 +122,44 @@ namespace DynamicSample
 
                 for (int y = 0; y < map.GetLength(1); y++)
                     for (int x = 0; x < map.GetLength(0); x++)
-                        sv[x, y] = map[x, y];
+                        if (invert)
+                        {
+                            if (map[x, y] != EmptySpace)
+                            {
+                                if (map[x, y] == BotHit)
+                                    sv[x, y] = UserHit;
+                                else
+                                {
+                                    if (map[x, y] == UserHit)
+                                        sv[x, y] = BotHit;
+                                    else
+                                        throw new Exception(
+                                            $@"Неизвестное значение поля на игровой карте ({map[x, y].Value}).");
+                                }
+                            }
+                            else
+                                sv[x, y] = map[x, y];
+                        }
+                        else
+                            sv[x, y] = map[x, y];
 
                 return sv;
             }
 
-            (HitCreator hc, bool end) CreateHit(bool isBot, SignValue[,] map, ref uint counter)
+            (HitCreator hc, bool end) CreateHit(bool isBot, SignValue[,] map, ref uint counter, bool invert)
             {
                 bool isStart = map == null;
 
+                counter++;
+
                 if (isStart)
                 {
-                    map = MapCopy(_mainProcessor);
+                    map = MapCopy(_mainProcessor, invert);
                     counter = 0;
                 }
 
                 uint ct = counter;
                 HitCreator lastHc = null;
-
-                counter++;
 
                 for (; _mainY < map.GetLength(1); _mainY++)
                 {
@@ -174,13 +193,10 @@ namespace DynamicSample
 
                                     do
                                     {
-                                        (HitCreator hc, bool end) = result.CreateHit(!isBot, result._mainProcessor, ref counter);
+                                        (HitCreator hc, bool end) = result.CreateHit(!isBot, result._mainProcessor, ref counter, invert);
 
                                         if (end)
-                                        {
-                                            counter = ct;
                                             break;
-                                        }
 
                                         if (ctMin > counter)
                                         {
@@ -220,33 +236,44 @@ namespace DynamicSample
                 return (null, true);
             }
 
-            public Processor NextStep
+            Processor StepByModelIndex(int modelStartIndex, int modelEndIndex = 2)
             {
-                get
-                {
-                    uint commonCounter = uint.MaxValue;
-                    HitCreator commonHitCreator = null;
+                uint commonCounter = uint.MaxValue;
+                HitCreator commonHitCreator = null;
+                int lastK = -1;
 
+                for (int k = modelStartIndex; k < modelEndIndex; k++)
+                {
                     while (true)
                     {
                         uint counter = 0;
-                        (HitCreator hc, bool end) = CreateHit(true, null, ref counter);
+                        (HitCreator hc, bool end) = CreateHit(true, null, ref counter, k == 0);
 
                         if (end)
                             break;
 
-                        if (hc == null || counter >= commonCounter)
+                        if (hc == null || counter > commonCounter)
                             continue;
 
+                        if (counter == commonCounter && k <= lastK)
+                            continue;
+
+                        lastK = k;
                         commonHitCreator = hc;
                         commonCounter = counter;
                     }
 
                     _mainY = _mainX = 0;
-
-                    return commonHitCreator?.Processor;
                 }
+
+                return commonHitCreator?.Processor;
             }
+
+            public bool CanUserWin => StepByModelIndex(0, 1) != null;
+
+            public bool CanBotWin => StepByModelIndex(1) != null;
+
+            public Processor NextStep => StepByModelIndex(0);
 
             public SignValue this[int x, int y] => _mainProcessor[x, y];
         }
@@ -265,11 +292,12 @@ namespace DynamicSample
         }
 
         /// <summary>
-        /// Изображение карты.
+        /// Изображение игровой карты.
         /// </summary>
         Bitmap _currentCanvas;
+
         /// <summary>
-        /// Поверхность для рисования.
+        /// Поверхность для рисования на игровой карте.
         /// </summary>
         Graphics _currentgrFront;
 
@@ -301,20 +329,20 @@ namespace DynamicSample
                 for (int x = 0; x < 3; x++)
                 {
                     if (_currentSession[x, y] == UserHit)
-                        DrawX(x * 161, y * 161);
+                        DrawX(x * 161, y * 161, _lastHitX == x && _lastHitY == y);
                     if (_currentSession[x, y] == BotHit)
-                        DrawZero(x * 161, y * 161, _lastBotHitX == x && _lastBotHitY == y);
+                        DrawZero(x * 161, y * 161, _lastHitX == x && _lastHitY == y);
                 }
 
             pbDraw.Refresh();
 
             return;
 
-            void DrawX(int x, int y)
+            void DrawX(int x, int y, bool lastHit)
             {
                 _currentgrFront.DrawString(@"X",
                     new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
-                    new SolidBrush(Color.DodgerBlue), x - 40, y - 50);
+                    new SolidBrush(lastHit ? Color.Green : Color.DodgerBlue), x - 40, y - 50);
             }
 
             void DrawZero(int x, int y, bool lastHit)
@@ -325,21 +353,59 @@ namespace DynamicSample
             }
         }
 
-        void PbDraw_MouseUp(object sender, MouseEventArgs e)
+        bool IsGameOver()
         {
-            int cx = e.X / 161;
-            int cy = e.Y / 161;
+            switch (_currentSession.CurrentWinner)
+            {
+                case Winner.NOBODY:
+                    {
+                        bool bw = _currentSession.CanBotWin;
+                        bool uw = _currentSession.CanUserWin;
 
-            if (!_currentSession.MakeUserHit(cx, cy))
-                return;
+                        switch (bw)
+                        {
+                            case false when !uw:
+                                MessageBox.Show(@"Ничья! Никому не удастся выиграть!");
+                                NewGame();
+                                return true;
+                            case false:
+                                MessageBox.Show(@"Не вижу смысла продолжать игру! Не смогу победить!");
+                                NewGame();
+                                return true;
+                            case true when !uw:
+                                MessageBox.Show(@"У тебя не получится меня победить!");
+                                NewGame();
+                                return true;
+                        }
 
+                        return false;
+                    }
+                case Winner.STANDOFF:
+                    MessageBox.Show(@"Ничья!");
+                    NewGame();
+                    return true;
+                case Winner.USER:
+                    MessageBox.Show(@"Вы выиграли!");
+                    NewGame();
+                    return true;
+                case Winner.BOT:
+                    MessageBox.Show(@"Компьютер выиграл!");
+                    NewGame();
+                    return true;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        bool MakeBotHit()
+        {
             Processor botHit = _currentSession.NextStep;
 
             if (botHit == null)
             {
-                MessageBox.Show(@"Вы выиграли! Не знаю, как ходить!");
+                MessageBox.Show(@"Сдаюсь! Победить не смогу!");
                 NewGame();
-                return;
+                return false;
             }
 
             int bx = Convert.ToInt32(botHit.Tag[1].ToString());
@@ -347,29 +413,51 @@ namespace DynamicSample
 
             _currentSession.MakeBotHit(bx, by);
 
-            _lastBotHitX = bx;
-            _lastBotHitY = by;
+            _lastHitX = bx;
+            _lastHitY = by;
 
             Repaint();
 
-            switch (_currentSession.CurrentWinner)
+            return true;
+        }
+
+        bool MakeUserHit(int px, int py)
+        {
+            int cx = px / 161;
+            int cy = py / 161;
+
+            if (!_currentSession.MakeUserHit(cx, cy))
+                return false;
+
+            _lastHitX = cx;
+            _lastHitY = cy;
+
+            Repaint();
+
+            return true;
+        }
+
+        void PbDraw_MouseClick(object sender, MouseEventArgs e)
+        {
+            if (!MakeUserHit(e.X, e.Y))
+                return;
+
+            if (IsGameOver())
+                return;
+
+            if (!MakeBotHit())
+                return;
+
+            IsGameOver();
+        }
+
+        void FrmSample_KeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.KeyCode)
             {
-                case Winner.NOBODY:
+                case Keys.Escape:
+                    Application.Exit();
                     return;
-                case Winner.STANDOFF:
-                    MessageBox.Show(@"Ничья!");
-                    NewGame();
-                    return;
-                case Winner.USER:
-                    MessageBox.Show(@"Вы выиграли!");
-                    NewGame();
-                    return;
-                case Winner.BOT:
-                    MessageBox.Show(@"Компьютер выиграл!");
-                    NewGame();
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
             }
         }
 
@@ -383,7 +471,7 @@ namespace DynamicSample
 
             _currentSession = new HitCreator(map);
 
-            _lastBotHitY = _lastBotHitX = -1;
+            _lastHitY = _lastHitX = -1;
 
             Repaint();
         }
