@@ -64,6 +64,7 @@
     <Compile Include="FrmSample.Designer.cs">
       <DependentUpon>FrmSample.cs</DependentUpon>
     </Compile>
+    <Compile Include="HitCreator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="FrmSample.resx">
