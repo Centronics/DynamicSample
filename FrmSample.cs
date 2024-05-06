@@ -2,7 +2,6 @@
 using System.Drawing;
 using System.Windows.Forms;
 using DynamicProcessor;
-using Processor = DynamicParser.Processor;
 
 namespace DynamicSample
 {
@@ -29,8 +28,6 @@ namespace DynamicSample
         Graphics _currentgrFront;
 
         HitCreator _currentSession;
-
-        int _lastHitX = -1, _lastHitY = -1;
 
         public FrmSample()
         {
@@ -63,13 +60,13 @@ namespace DynamicSample
             _currentgrFront.DrawRectangle(BlackPen, 0, 322, pbDraw.Width, 2);
 
             for (int y = 0; y < 3; y++)
-            for (int x = 0; x < 3; x++)
-            {
-                if (_currentSession[x, y] == UserHit)
-                    DrawX(x * 161, y * 161, _lastHitX == x && _lastHitY == y);
-                if (_currentSession[x, y] == BotHit)
-                    DrawZero(x * 161, y * 161, _lastHitX == x && _lastHitY == y);
-            }
+                for (int x = 0; x < 3; x++)
+                {
+                    if (_currentSession[x, y] == UserHit)
+                        DrawX(x * 161, y * 161, _currentSession.LastHitX == x && _currentSession.LastHitY == y);
+                    if (_currentSession[x, y] == BotHit)
+                        DrawZero(x * 161, y * 161, _currentSession.LastHitX == x && _currentSession.LastHitY == y);
+                }
 
             pbDraw.Refresh();
 
@@ -79,7 +76,7 @@ namespace DynamicSample
             {
                 _currentgrFront.DrawString(@"X",
                     new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
-                    new SolidBrush(lastHit ? Color.Green : Color.DodgerBlue), x - 40, y - 50);
+                    new SolidBrush(lastHit ? Color.Green : Color.DodgerBlue), x - 36, y - 46);
             }
 
             void DrawZero(int x, int y, bool lastHit)
@@ -90,39 +87,39 @@ namespace DynamicSample
             }
         }
 
-        bool IsGameOver()
+        bool HandleGameOver(bool over)
         {
             switch (_currentSession.CurrentWinner)
             {
                 case Winner.NOBODY:
-                {
-                    bool bw = _currentSession.CanBotWin;
-                    bool uw = _currentSession.CanUserWin;
-
-                    switch (bw)
                     {
-                        case false when !uw:
-                            MessageBox.Show(@"Ничья! Никому не удастся выиграть!");
-                            NewGame();
-                            return true;
-                        case false:
-                            MessageBox.Show(@"Не вижу смысла продолжать игру! Не смогу победить!");
-                            NewGame();
-                            return true;
-                        case true when !uw:
-                            MessageBox.Show(@"У тебя не получится меня победить!");
-                            NewGame();
-                            return true;
-                    }
+                        bool bw = _currentSession.CanBotWin;
+                        bool uw = _currentSession.CanUserWin;
 
-                    return false;
-                }
+                        switch (bw)
+                        {
+                            case false when !uw:
+                                MessageBox.Show(@"Ничья! Никому не удастся выиграть!");
+                                NewGame();
+                                return true;
+                            case false when over:
+                                MessageBox.Show(@"Я не смогу выиграть, а ты сможешь! Давай заново!");
+                                NewGame();
+                                return true;
+                            case true when !uw && over:
+                                MessageBox.Show(@"У тебя не получится меня победить!");
+                                NewGame();
+                                return true;
+                        }
+
+                        return false;
+                    }
                 case Winner.STANDOFF:
                     MessageBox.Show(@"Ничья!");
                     NewGame();
                     return true;
                 case Winner.USER:
-                    MessageBox.Show(@"Вы выиграли!");
+                    MessageBox.Show(@"Ты выиграл!");
                     NewGame();
                     return true;
                 case Winner.BOT:
@@ -134,30 +131,6 @@ namespace DynamicSample
             }
         }
 
-        bool MakeBotHit()
-        {
-            Processor botHit = _currentSession.NextStep;
-
-            if (botHit == null)
-            {
-                MessageBox.Show(@"Сдаюсь! Победить не смогу!");
-                NewGame();
-                return false;
-            }
-
-            int bx = Convert.ToInt32(botHit.Tag[1].ToString());
-            int by = Convert.ToInt32(botHit.Tag[2].ToString());
-
-            _currentSession.MakeBotHit(bx, by);
-
-            _lastHitX = bx;
-            _lastHitY = by;
-
-            Repaint();
-
-            return true;
-        }
-
         bool MakeUserHit(int px, int py)
         {
             int cx = px / 161;
@@ -166,9 +139,6 @@ namespace DynamicSample
             if (!_currentSession.MakeUserHit(cx, cy))
                 return false;
 
-            _lastHitX = cx;
-            _lastHitY = cy;
-
             Repaint();
 
             return true;
@@ -176,16 +146,25 @@ namespace DynamicSample
 
         void PbDraw_MouseClick(object sender, MouseEventArgs e)
         {
-            if (!MakeUserHit(e.X, e.Y))
-                return;
+            try
+            {
+                if (!MakeUserHit(e.X, e.Y))
+                    return;
 
-            if (IsGameOver())
-                return;
+                if (HandleGameOver(false))
+                    return;
 
-            if (!MakeBotHit())
-                return;
+                _currentSession.MakeBotHit();
 
-            IsGameOver();
+                Repaint();
+
+                HandleGameOver(true);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Application.Exit();
+            }
         }
 
         void FrmSample_KeyDown(object sender, KeyEventArgs e)
@@ -198,19 +177,40 @@ namespace DynamicSample
             }
         }
 
+        void FrmSample_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            _currentgrFront?.Dispose();
+
+            DisposeImage(pbDraw);
+        }
+
         void NewGame()
         {
-            SignValue[,] map = new SignValue[3, 3];
-
-            for (int y = 0; y < map.GetLength(1); y++)
-            for (int x = 0; x < map.GetLength(0); x++)
-                map[x, y] = EmptySpace;
-
-            _currentSession = new HitCreator(map);
-
-            _lastHitY = _lastHitX = -1;
+            _currentSession = new HitCreator();
 
             Repaint();
+        }
+
+        /// <summary>
+        ///     Освобождает ресурсы, занимаемые изображением в указанном <see cref="PictureBox" />.
+        /// </summary>
+        /// <param name="pb"><see cref="PictureBox" />, <see cref="PictureBox.Image" /> которого требуется освободить.</param>
+        /// <remarks>
+        ///     После освобождения <see cref="PictureBox.Image" /> = <see langword="null" />.
+        /// </remarks>
+        public static void DisposeImage(PictureBox pb)
+        {
+            if (pb == null)
+                throw new ArgumentNullException(nameof(pb), $@"{nameof(DisposeImage)}: {nameof(pb)} = null.");
+
+            Image image = pb.Image;
+
+            if (image == null)
+                return;
+
+            pb.Image = null;
+
+            image.Dispose();
         }
     }
 }

@@ -1,7 +1,6 @@
 ﻿using System;
 using DynamicProcessor;
 using static DynamicSample.FrmSample;
-using Processor = DynamicParser.Processor;
 
 namespace DynamicSample
 {
@@ -9,11 +8,18 @@ namespace DynamicSample
     {
         readonly SignValue[,] _mainProcessor;
 
-        int _hitX, _hitY;
-
         int _mainX, _mainY;
 
-        public HitCreator(SignValue[,] map)
+        public HitCreator()
+        {
+            _mainProcessor = new SignValue[3, 3];
+
+            for (int y = 0, mY = _mainProcessor.GetLength(1); y < mY; y++)
+                for (int x = 0, mX = _mainProcessor.GetLength(0); x < mX; x++)
+                    _mainProcessor[x, y] = EmptySpace;
+        }
+
+        HitCreator(SignValue[,] map)
         {
             if (map == null)
                 throw new ArgumentNullException(nameof(map));
@@ -21,15 +27,15 @@ namespace DynamicSample
             _mainProcessor = MapCopy(map, false);
         }
 
-        Processor Processor => new Processor(_mainProcessor, $@"b{_hitX}{_hitY}");
-
         public Winner CurrentWinner => GetWinner(_mainProcessor);
 
         public bool CanUserWin => StepByModelIndex(0, 1) != null;
 
         public bool CanBotWin => StepByModelIndex(1) != null;
 
-        public Processor NextStep => StepByModelIndex(0);
+        public int LastHitX { get; private set; } = -1;
+
+        public int LastHitY { get; private set; } = -1;
 
         public SignValue this[int x, int y] => _mainProcessor[x, y];
 
@@ -49,10 +55,10 @@ namespace DynamicSample
             if (bb)
                 return Winner.BOT;
 
-            for (int y = 0; y < p.GetLength(1); y++)
-            for (int x = 0; x < p.GetLength(0); x++)
-                if (p[x, y] == EmptySpace)
-                    return Winner.NOBODY;
+            for (int y = 0, mY = p.GetLength(1); y < mY; y++)
+                for (int x = 0, mX = p.GetLength(0); x < mX; x++)
+                    if (p[x, y] == EmptySpace)
+                        return Winner.NOBODY;
 
             return Winner.STANDOFF;
 
@@ -97,16 +103,28 @@ namespace DynamicSample
                 return false;
 
             _mainProcessor[x, y] = UserHit;
+
+            LastHitX = x;
+            LastHitY = y;
+
             return true;
         }
 
-        public void MakeBotHit(int x, int y)
+        public void MakeBotHit()
         {
+            HitCreator hc = StepByModelIndex(0) ?? throw new Exception(@"Почему-то я не знаю, как ходить - ВНУТРЕННЯЯ ошибка.");
+
+            int x = hc.LastHitX;
+            int y = hc.LastHitY;
+
             if (_mainProcessor[x, y] != EmptySpace)
                 throw new Exception(
                     $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
 
             _mainProcessor[x, y] = BotHit;
+
+            LastHitX = x;
+            LastHitY = y;
         }
 
         static SignValue[,] MapCopy(SignValue[,] map, bool invert)
@@ -114,35 +132,30 @@ namespace DynamicSample
             if (map == null)
                 throw new ArgumentNullException(nameof(map));
 
-            SignValue[,] sv = new SignValue[map.GetLength(0), map.GetLength(1)];
+            int sX = map.GetLength(0), sY = map.GetLength(1);
 
-            for (int y = 0; y < map.GetLength(1); y++)
-            for (int x = 0; x < map.GetLength(0); x++)
-                if (invert)
+            SignValue[,] sv = new SignValue[sX, sY];
+
+            for (int y = 0; y < sY; y++)
+                for (int x = 0; x < sX; x++)
                 {
-                    if (map[x, y] != EmptySpace)
-                    {
-                        if (map[x, y] == BotHit)
-                        {
-                            sv[x, y] = UserHit;
-                        }
-                        else
-                        {
-                            if (map[x, y] == UserHit)
-                                sv[x, y] = BotHit;
-                            else
-                                throw new Exception(
-                                    $@"Неизвестное значение поля на игровой карте ({map[x, y].Value}).");
-                        }
-                    }
-                    else
+                    if (!invert || map[x, y] == EmptySpace)
                     {
                         sv[x, y] = map[x, y];
+                        continue;
                     }
-                }
-                else
-                {
-                    sv[x, y] = map[x, y];
+
+                    if (map[x, y] == BotHit)
+                    {
+                        sv[x, y] = UserHit;
+                        continue;
+                    }
+
+                    if (map[x, y] != UserHit)
+                        throw new Exception(
+                            $@"Неизвестное значение поля на игровой карте ({map[x, y].Value}).");
+
+                    sv[x, y] = BotHit;
                 }
 
             return sv;
@@ -163,9 +176,9 @@ namespace DynamicSample
             uint ct = counter;
             HitCreator lastHc = null;
 
-            for (; _mainY < map.GetLength(1); _mainY++)
+            for (int mMainY = map.GetLength(1); _mainY < mMainY; _mainY++)
             {
-                for (; _mainX < map.GetLength(0); _mainX++)
+                for (int mMainX = map.GetLength(0); _mainX < mMainX; _mainX++)
                 {
                     if (map[_mainX, _mainY] != EmptySpace)
                         continue;
@@ -176,8 +189,8 @@ namespace DynamicSample
                         {
                             [_mainX, _mainY] = isBot ? BotHit : UserHit
                         },
-                        _hitX = _mainX,
-                        _hitY = _mainY
+                        LastHitX = _mainX,
+                        LastHitY = _mainY
                     };
 
                     switch (result.CurrentWinner)
@@ -190,42 +203,42 @@ namespace DynamicSample
                             _mainX++;
                             return (null, false);
                         case Winner.NOBODY:
-                        {
-                            uint ctMin = uint.MaxValue;
-
-                            do
                             {
-                                (HitCreator hc, bool end) =
-                                    result.CreateHit(!isBot, result._mainProcessor, ref counter, invert);
+                                uint ctMin = uint.MaxValue;
 
-                                if (end)
-                                    break;
-
-                                if (ctMin > counter)
+                                do
                                 {
-                                    if (hc == null)
+                                    (HitCreator hc, bool end) =
+                                        result.CreateHit(!isBot, result._mainProcessor, ref counter, invert);
+
+                                    if (end)
+                                        break;
+
+                                    if (ctMin > counter)
                                     {
-                                        counter = ct;
-                                        continue;
+                                        if (hc == null)
+                                        {
+                                            counter = ct;
+                                            continue;
+                                        }
+
+                                        ctMin = counter;
+                                        lastHc = hc;
                                     }
 
-                                    ctMin = counter;
-                                    lastHc = hc;
+                                    counter = ct;
+                                } while (true);
+
+                                if (ctMin != uint.MaxValue)
+                                {
+                                    _mainX++;
+                                    counter = ctMin;
+
+                                    return (lastHc, false);
                                 }
 
-                                counter = ct;
-                            } while (true);
-
-                            if (ctMin != uint.MaxValue)
-                            {
-                                _mainX++;
-                                counter = ctMin;
-
-                                return (lastHc, false);
+                                break;
                             }
-
-                            break;
-                        }
                         default:
                             throw new ArgumentOutOfRangeException();
                     }
@@ -238,7 +251,7 @@ namespace DynamicSample
             return (null, true);
         }
 
-        Processor StepByModelIndex(int modelStartIndex, int modelEndIndex = 2)
+        HitCreator StepByModelIndex(int modelStartIndex, int modelEndIndex = 2)
         {
             uint commonCounter = uint.MaxValue;
             HitCreator commonHitCreator = null;
@@ -268,7 +281,7 @@ namespace DynamicSample
                 _mainY = _mainX = 0;
             }
 
-            return commonHitCreator?.Processor;
+            return commonHitCreator;
         }
     }
 }

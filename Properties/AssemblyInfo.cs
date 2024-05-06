@@ -5,9 +5,10 @@ using System.Runtime.InteropServices;
 // набора атрибутов. Измените значения этих атрибутов для изменения сведений,
 // связанных со сборкой.
 [assembly: AssemblyTitle("DynamicSample")]
-[assembly: AssemblyDescription("")]
+[assembly:
+    AssemblyDescription("Программа демонстрирует работу аналитической системы на примере игры в крестики-нолики.")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Home")]
 [assembly: AssemblyProduct("DynamicSample")]
 [assembly: AssemblyCopyright("Copyright ©  2024")]
 [assembly: AssemblyTrademark("")]
