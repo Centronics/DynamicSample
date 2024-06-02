@@ -1,170 +1,78 @@
 ﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
-using DynamicProcessor;
 
 namespace DynamicSample
 {
     public partial class FrmSample : Form
     {
-        public enum Winner
-        {
-            USER,
-            BOT,
-            STANDOFF,
-            NOBODY
-        }
-
         static readonly Pen BlackPen = new Pen(Color.Black, 2.0f);
 
-        /// <summary>
-        ///     Изображение игровой карты.
-        /// </summary>
-        Bitmap _currentCanvas;
+        Bitmap _gameCanvas;
 
-        /// <summary>
-        ///     Поверхность для рисования на игровой карте.
-        /// </summary>
-        Graphics _currentgrFront;
+        Graphics _gameGrFront;
 
-        HitCreator _currentSession;
+        GameSession _gameSession;
 
         public FrmSample()
         {
             InitializeComponent();
         }
 
-        public static SignValue UserHit => SignValue.MaxValue;
-
-        public static SignValue BotHit => SignValue.MinValue;
-
-        public static SignValue EmptySpace => SignValue.MaxValue.Average(SignValue.MinValue);
-
-        void FrmSample_Shown(object sender, EventArgs e)
-        {
-            _currentCanvas = new Bitmap(pbDraw.Width, pbDraw.Height);
-            _currentgrFront = Graphics.FromImage(_currentCanvas);
-            pbDraw.Image = _currentCanvas;
-
-            NewGame();
-        }
-
-        void Repaint()
-        {
-            _currentgrFront.Clear(Color.LightGray);
-
-            _currentgrFront.DrawRectangle(BlackPen, 161, 0, 2, pbDraw.Height);
-            _currentgrFront.DrawRectangle(BlackPen, 322, 0, 2, pbDraw.Height);
-
-            _currentgrFront.DrawRectangle(BlackPen, 0, 161, pbDraw.Width, 2);
-            _currentgrFront.DrawRectangle(BlackPen, 0, 322, pbDraw.Width, 2);
-
-            for (int y = 0; y < 3; y++)
-                for (int x = 0; x < 3; x++)
-                {
-                    if (_currentSession[x, y] == UserHit)
-                        DrawX(x * 161, y * 161, _currentSession.LastHitX == x && _currentSession.LastHitY == y);
-                    if (_currentSession[x, y] == BotHit)
-                        DrawZero(x * 161, y * 161, _currentSession.LastHitX == x && _currentSession.LastHitY == y);
-                }
-
-            pbDraw.Refresh();
-
-            return;
-
-            void DrawX(int x, int y, bool lastHit)
-            {
-                _currentgrFront.DrawString(@"X",
-                    new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
-                    new SolidBrush(lastHit ? Color.Green : Color.DodgerBlue), x - 36, y - 46);
-            }
-
-            void DrawZero(int x, int y, bool lastHit)
-            {
-                _currentgrFront.DrawString(@"O",
-                    new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
-                    new SolidBrush(lastHit ? Color.Green : Color.Red), x - 35, y - 43);
-            }
-        }
-
-        bool HandleGameOver(bool over)
-        {
-            switch (_currentSession.CurrentWinner)
-            {
-                case Winner.NOBODY:
-                    {
-                        bool bw = _currentSession.CanBotWin;
-                        bool uw = _currentSession.CanUserWin;
-
-                        switch (bw)
-                        {
-                            case false when !uw:
-                                MessageBox.Show(@"Ничья! Никому не удастся выиграть!");
-                                NewGame();
-                                return true;
-                            case false when over:
-                                MessageBox.Show(@"Я не смогу выиграть, а ты сможешь! Давай заново!");
-                                NewGame();
-                                return true;
-                            case true when !uw && over:
-                                MessageBox.Show(@"У тебя не получится меня победить!");
-                                NewGame();
-                                return true;
-                        }
-
-                        return false;
-                    }
-                case Winner.STANDOFF:
-                    MessageBox.Show(@"Ничья!");
-                    NewGame();
-                    return true;
-                case Winner.USER:
-                    MessageBox.Show(@"Ты выиграл!");
-                    NewGame();
-                    return true;
-                case Winner.BOT:
-                    MessageBox.Show(@"Компьютер выиграл!");
-                    NewGame();
-                    return true;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        bool MakeUserHit(int px, int py)
-        {
-            int cx = px / 161;
-            int cy = py / 161;
-
-            if (!_currentSession.MakeUserHit(cx, cy))
-                return false;
-
-            Repaint();
-
-            return true;
-        }
-
         void PbDraw_MouseClick(object sender, MouseEventArgs e)
         {
             try
             {
-                if (!MakeUserHit(e.X, e.Y))
+                if (!_gameSession.MakeUserHit(e.X / 161, e.Y / 161))
                     return;
 
-                if (HandleGameOver(false))
-                    return;
+                RefreshGameField();
 
-                _currentSession.MakeBotHit();
+                if (_gameSession.CurrentWinner == GameSession.Winner.NOBODY)
+                {
+                    if (!_gameSession.MakeBotHit())
+                    {
+                        MessageBox.Show(@"Ничья, никто не сможет выиграть!");
+                        RefreshGameField(true);
+                        return;
+                    }
 
-                Repaint();
+                    RefreshGameField();
+                }
 
-                HandleGameOver(true);
+                switch (_gameSession.CurrentWinner)
+                {
+                    case GameSession.Winner.NOBODY:
+                        return;
+                    case GameSession.Winner.STANDOFF:
+                        MessageBox.Show(@"Ничья!");
+                        RefreshGameField(true);
+                        return;
+                    case GameSession.Winner.USER:
+                        MessageBox.Show(@"Ты выиграл!");
+                        RefreshGameField(true);
+                        return;
+                    case GameSession.Winner.BOT:
+                        MessageBox.Show(@"Компьютер выиграл!");
+                        RefreshGameField(true);
+                        return;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Application.Exit();
             }
+        }
+
+        void FrmSample_Shown(object sender, EventArgs e)
+        {
+            pbDraw.Image = _gameCanvas = new Bitmap(pbDraw.Width, pbDraw.Height);
+            _gameGrFront = Graphics.FromImage(_gameCanvas);
+
+            RefreshGameField();
         }
 
         void FrmSample_KeyDown(object sender, KeyEventArgs e)
@@ -179,38 +87,51 @@ namespace DynamicSample
 
         void FrmSample_FormClosed(object sender, FormClosedEventArgs e)
         {
-            _currentgrFront?.Dispose();
+            pbDraw.Image = null;
 
-            DisposeImage(pbDraw);
+            _gameGrFront?.Dispose();
+            _gameCanvas?.Dispose();
         }
 
-        void NewGame()
+        void RefreshGameField(bool createNewGame = false)
         {
-            _currentSession = new HitCreator();
+            if (createNewGame || _gameSession == null)
+                _gameSession = new GameSession();
 
-            Repaint();
-        }
+            _gameGrFront.Clear(Color.LightGray);
 
-        /// <summary>
-        ///     Освобождает ресурсы, занимаемые изображением в указанном <see cref="PictureBox" />.
-        /// </summary>
-        /// <param name="pb"><see cref="PictureBox" />, <see cref="PictureBox.Image" /> которого требуется освободить.</param>
-        /// <remarks>
-        ///     После освобождения <see cref="PictureBox.Image" /> = <see langword="null" />.
-        /// </remarks>
-        public static void DisposeImage(PictureBox pb)
-        {
-            if (pb == null)
-                throw new ArgumentNullException(nameof(pb), $@"{nameof(DisposeImage)}: {nameof(pb)} = null.");
+            _gameGrFront.DrawRectangle(BlackPen, 161, 0, 2, pbDraw.Height);
+            _gameGrFront.DrawRectangle(BlackPen, 322, 0, 2, pbDraw.Height);
 
-            Image image = pb.Image;
+            _gameGrFront.DrawRectangle(BlackPen, 0, 161, pbDraw.Width, 2);
+            _gameGrFront.DrawRectangle(BlackPen, 0, 322, pbDraw.Width, 2);
 
-            if (image == null)
-                return;
+            for (int y = 0; y < 3; y++)
+                for (int x = 0; x < 3; x++)
+                {
+                    if (_gameSession[x, y] == GameSession.UserHit)
+                        DrawX(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+                    if (_gameSession[x, y] == GameSession.BotHit)
+                        DrawZero(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+                }
 
-            pb.Image = null;
+            pbDraw.Refresh();
 
-            image.Dispose();
+            return;
+
+            void DrawX(int x, int y, bool lastHit)
+            {
+                _gameGrFront.DrawString(@"X",
+                    new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
+                    new SolidBrush(lastHit ? Color.Green : Color.DodgerBlue), x - 36, y - 46);
+            }
+
+            void DrawZero(int x, int y, bool lastHit)
+            {
+                _gameGrFront.DrawString(@"O",
+                    new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
+                    new SolidBrush(lastHit ? Color.Green : Color.Red), x - 35, y - 43);
+            }
         }
     }
 }
