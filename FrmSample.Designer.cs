@@ -28,10 +28,8 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(FrmSample));
             this.pbDraw = new System.Windows.Forms.PictureBox();
-            this.tmrWork = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.pbDraw)).BeginInit();
             this.SuspendLayout();
             // 
@@ -44,10 +42,6 @@
             this.pbDraw.TabIndex = 3;
             this.pbDraw.TabStop = false;
             this.pbDraw.MouseClick += new System.Windows.Forms.MouseEventHandler(this.PbDraw_MouseClick);
-            // 
-            // tmrWork
-            // 
-            this.tmrWork.Interval = 1000;
             // 
             // FrmSample
             // 
@@ -73,7 +67,6 @@
 
         #endregion
         private System.Windows.Forms.PictureBox pbDraw;
-        private System.Windows.Forms.Timer tmrWork;
     }
 }
 
