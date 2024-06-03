@@ -107,13 +107,13 @@ namespace DynamicSample
             _gameGrFront.DrawRectangle(BlackPen, 0, 322, pbDraw.Width, 2);
 
             for (int y = 0; y < 3; y++)
-                for (int x = 0; x < 3; x++)
-                {
-                    if (_gameSession[x, y] == GameSession.UserHit)
-                        DrawX(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
-                    if (_gameSession[x, y] == GameSession.BotHit)
-                        DrawZero(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
-                }
+            for (int x = 0; x < 3; x++)
+            {
+                if (_gameSession[x, y] == GameSession.UserHit)
+                    DrawX(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+                if (_gameSession[x, y] == GameSession.BotHit)
+                    DrawZero(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+            }
 
             pbDraw.Refresh();
 

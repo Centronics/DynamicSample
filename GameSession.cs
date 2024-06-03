@@ -12,11 +12,11 @@ namespace DynamicSample
             NOBODY
         }
 
+        const int EmptySpace = 0;
+
         public static readonly int UserHit = int.MaxValue;
 
         public static readonly int BotHit = int.MinValue;
-
-        const int EmptySpace = 0;
 
         readonly int[,] _gameField;
 
@@ -27,8 +27,8 @@ namespace DynamicSample
             _gameField = new int[3, 3];
 
             for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                    _gameField[x, y] = EmptySpace;
+            for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
+                _gameField[x, y] = EmptySpace;
         }
 
         GameSession(int[,] map)
@@ -63,9 +63,9 @@ namespace DynamicSample
                 }
 
                 for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                    for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                        if (_gameField[x, y] == EmptySpace)
-                            return Winner.NOBODY;
+                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
+                    if (_gameField[x, y] == EmptySpace)
+                        return Winner.NOBODY;
 
                 return Winner.STANDOFF;
 
@@ -266,26 +266,26 @@ namespace DynamicSample
             int[,] result = new int[sX, sY];
 
             for (int y = 0; y < sY; y++)
-                for (int x = 0; x < sX; x++)
+            for (int x = 0; x < sX; x++)
+            {
+                if (!invert || map[x, y] == EmptySpace)
                 {
-                    if (!invert || map[x, y] == EmptySpace)
-                    {
-                        result[x, y] = map[x, y];
-                        continue;
-                    }
-
-                    if (map[x, y] == BotHit)
-                    {
-                        result[x, y] = UserHit;
-                        continue;
-                    }
-
-                    if (map[x, y] != UserHit)
-                        throw new Exception(
-                            $@"Неизвестное значение поля на игровой карте ({map[x, y]}).");
-
-                    result[x, y] = BotHit;
+                    result[x, y] = map[x, y];
+                    continue;
                 }
+
+                if (map[x, y] == BotHit)
+                {
+                    result[x, y] = UserHit;
+                    continue;
+                }
+
+                if (map[x, y] != UserHit)
+                    throw new Exception(
+                        $@"Неизвестное значение поля на игровой карте ({map[x, y]}).");
+
+                result[x, y] = BotHit;
+            }
 
             return result;
         }
