@@ -96,7 +96,10 @@ namespace DynamicSample
         void RefreshGameField(bool createNewGame = false)
         {
             if (createNewGame || _gameSession == null)
+            {
+                _gameSession?.RotateCurrentSession();
                 _gameSession = new GameSession();
+            }
 
             _gameGrFront.Clear(Color.LightGray);
 
@@ -110,9 +113,9 @@ namespace DynamicSample
             for (int x = 0; x < 3; x++)
             {
                 if (_gameSession[x, y] == GameSession.UserHit)
-                    DrawX(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+                    DrawX(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
                 if (_gameSession[x, y] == GameSession.BotHit)
-                    DrawZero(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+                    DrawZero(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
             }
 
             pbDraw.Refresh();
