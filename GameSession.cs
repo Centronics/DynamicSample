@@ -1,10 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+//using System.Runtime.InteropServices;
+
+//using System.Windows.Forms;
+
+//using System.Linq;
 
 namespace DynamicSample
 {
-    internal class GameSession
+    internal sealed class GameSession
     {
         public enum Winner
         {
@@ -24,53 +28,28 @@ namespace DynamicSample
 
         int _curX, _curY;
 
-        int _rotateIndex;
+        static GameSession _lastSolution;
+        //static HashSet<GameSession> _lastSet; // REFACTORING!!!
 
-        static readonly HashSet<GameSession> CommonGameSessions = new HashSet<GameSession>();
+        //static readonly Dictionary<GameSession, HashSet<GameSession>> FallingStates = new Dictionary<GameSession, HashSet<GameSession>>();
 
-        static readonly List<GameSession> CurrentGameStep = new List<GameSession>();
-
-        static void RotateSession()
-        {
-            foreach (GameSession gs in CurrentGameStep)
-                gs.Rotate();
-
-            CurrentGameStep.Clear();
-        }
-
-        public void RotateCurrentSession()
-        {
-            Winner w = CurrentWinner;
-
-            if (w == Winner.USER || w == Winner.STANDOFF)
-                RotateSession();
-        }
+        static readonly HashSet<GameSession> FallingStates = new HashSet<GameSession>();
 
         public GameSession()
         {
-            CurrentGameStep.Clear();
-
             _gameField = new int[3, 3];
 
             for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-            for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                _gameField[x, y] = EmptySpace;
+                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
+                    _gameField[x, y] = EmptySpace;
         }
 
-        GameSession(int[,] map)
+        GameSession(GameSession gs, bool invert = false)
         {
-            if (map == null)
-                throw new ArgumentNullException(nameof(map));
-
-            _gameField = GameFieldCopy(map);
-        }
-
-        GameSession(GameSession gs)
-        {
-            if (gs == null)
+            if (gs is null)
                 throw new ArgumentNullException();
 
-            _gameField = GameFieldCopy(gs._gameField);
+            _gameField = GameFieldCopy(gs._gameField, invert);
 
             HitX = gs.HitX;
             HitY = gs.HitY;
@@ -82,19 +61,12 @@ namespace DynamicSample
 
         public int this[int x, int y] => _gameField[x, y];
 
-        void Rotate()
-        {
-            _rotateIndex++;
-        }
-
         public override bool Equals(object obj)
         {
             if (ReferenceEquals(this, obj))
                 return true;
 
-            GameSession gs = obj as GameSession;
-
-            if (gs == null)
+            if (!(obj is GameSession gs))
                 return false;
 
             for (int y = 0, my = gs._gameField.GetLength(1); y < my; y++)
@@ -144,9 +116,9 @@ namespace DynamicSample
                 }
 
                 for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                    if (_gameField[x, y] == EmptySpace)
-                        return Winner.NOBODY;
+                    for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
+                        if (_gameField[x, y] == EmptySpace)
+                            return Winner.NOBODY;
 
                 return Winner.STANDOFF;
 
@@ -196,31 +168,31 @@ namespace DynamicSample
             HitX = x;
             HitY = y;
 
+            if (_lastSolution is null)
+                return true;
+
+            switch (CurrentWinner)
+            {
+                case Winner.BOT:
+                    _lastSolution = null;
+                    break;
+                case Winner.USER:
+                case Winner.STANDOFF:
+                    //_lastSet?.Add(_lastSolution); // сделать флаг - изменена или нет
+                    FallingStates.Add(_lastSolution);
+                    _lastSolution = null;
+                    break;
+            }
+
             return true;
         }
 
         public bool MakeBotHit()
         {
-            if (CommonGameSessions.TryGetValue(this, out GameSession gs))
-            {
-                _rotateIndex = gs._rotateIndex;
-                CurrentGameStep.Add(gs);
-            }
-            else
-            {
-                _rotateIndex = 0;
-                GameSession t = new GameSession(this);
-                CommonGameSessions.Add(t);
-                CurrentGameStep.Add(t);
-            }
-
             GameSession p = HowChangeFrame();
 
-            if (p == null)
-            {
-                RotateSession();
+            if (p is null)
                 return false;
-            }
 
             int x = p.HitX;
             int y = p.HitY;
@@ -234,63 +206,108 @@ namespace DynamicSample
             HitX = x;
             HitY = y;
 
+            //if (CurrentWinner == Winner.NOBODY)
+                //_lastSolution = new GameSession(this);
+
             return true;
         }
 
         GameSession HowChangeFrame()
         {
-            if (_rotateIndex < 0)
-                throw new InvalidOperationException($@"Значение {nameof(_rotateIndex)} не может быть меньше нуля ({_rotateIndex}).");
+            _lastSolution = new GameSession(this);
 
-            List<(GameSession gs, int ctxLen)> gss = new List<(GameSession gs, int ctxLen)>();
+            //HashSet<GameSession> gameSessions;
 
-            for (int k = 0, resultLength = int.MaxValue; k < 2; k++)
+            //if (!FallingStates.TryGetValue(this, out HashSet<GameSession> v))
+            //{
+            //    gameSessions = new HashSet<GameSession>();
+            //    FallingStates.Add(new GameSession(this), gameSessions); // FallingStates сделать без карт, т.е. просто списком, и проверять его на карты, предшествующие проигрышу, и всё...
+            //}
+            //else
+            //    gameSessions = v;
+
+            //_lastSet = gameSessions;
+
+            GameSession result = null;
+            bool cUf = false;
+
+            for (int lk = -1, k = 0, resultLength = int.MaxValue; k < 2; k++)
             {
                 while (true)
                 {
                     int ctxLength = 0;
-                    (GameSession frame, bool end) = NextFrame(true, null, ref ctxLength, k == 0);
+                    (GameSession frame, bool end, bool uf) = NextFrame(true, null, ref ctxLength, k == 0, null); //gameSessions
 
                     if (end)
                         break;
 
-                    if (frame == null || ctxLength > resultLength)
+                    if (frame is null)
                         continue;
 
-                    resultLength = ctxLength;
+                    if (uf)
+                    {
+                        if (cUf)
+                        {
+                            if (ctxLength > resultLength || (ctxLength == resultLength && lk == k))
+                                continue;
+                        }
+                        else
+                        {
+                            if (lk > -1)
+                                continue;
+                        }
+                    }
+                    else
+                    {
+                        if (cUf)
+                        {
+                            // ignored
+                        }
+                        else
+                        {
+                            if (ctxLength > resultLength || (ctxLength == resultLength && lk == k))
+                                continue;
+                        }
+                    }
 
-                    gss.Add((frame, resultLength));
+                    resultLength = ctxLength;
+                    result = new GameSession(frame, k == 0);
+
+                    if (k == 0)
+                        result._gameField[result.HitX, result.HitY] = BotHit;
+
+                    cUf = uf;
+                    lk = k;
                 }
 
                 _curY = _curX = 0;
             }
 
-            if (!gss.Any())
-                return null;
+            //if (cUf)
+            {
+                //_lastSolution = new GameSession(this);
+                //_lastSet = gameSessions;
+                //  FallingStates[this].Clear(); // ПОДУМАТЬ НАД очисткой
+            }
 
-            int minCtxLen = gss.Select(v => v.ctxLen).Min();
-
-            List<GameSession> bestGss = new List<GameSession>(gss.Where(v => v.ctxLen == minCtxLen).Select(v => v.gs));
-
-            if (!bestGss.Any())
-                throw new InvalidOperationException(@"Массив результата не может быть пустым!");
-
-            return bestGss[_rotateIndex % bestGss.Count];
+            return result;
         }
 
-        (GameSession frame, bool end) NextFrame(bool isBot, int[,] map, ref int ctxLength, bool invert)
+        (GameSession frame, bool end, bool uf) NextFrame(bool isBot, GameSession map, ref int ctxLength, bool invert, HashSet<GameSession> fStates)
         {
             int ctl = ++ctxLength;
 
             if (map == null)
             {
-                map = GameFieldCopy(_gameField, invert);
+                map = new GameSession(this, invert);
                 ctl = ctxLength = 0;
+                //if (fStates is null)
+                //  throw new ArgumentNullException();
             }
 
-            for (int mMainY = map.GetLength(1); _curY < mMainY; _curY++)
+            for (int mMainY = map._gameField.GetLength(1); _curY < mMainY; _curY++)
             {
-                for (int mMainX = map.GetLength(0); _curX < mMainX; _curX++)
+                for (int mMainX = map._gameField.GetLength(0); _curX < mMainX; _curX++)
                 {
                     if (map[_curX, _curY] != EmptySpace)
                         continue;
@@ -305,49 +322,105 @@ namespace DynamicSample
                         HitY = _curY
                     };
 
-                    int ctxMinLength = int.MaxValue;
-
                     switch (ctx.CurrentWinner)
                     {
                         case Winner.BOT:
                             _curX++;
-                            return (ctx, false);
+                            return (ctx, false, false); // !invert && FallingStates.Contains(ctx)); //fStates.Contains(ctx));
                         case Winner.USER:
                         case Winner.STANDOFF:
                             _curX++;
-                            return (null, false);
+                            return (null, false, false);
                         case Winner.NOBODY:
-                            while (true)
                             {
-                                (GameSession frame, bool end) =
-                                    ctx.NextFrame(!isBot, ctx._gameField, ref ctxLength, invert);
-
-                                if (end)
+                                if (!invert && FallingStates.Contains(ctx)) //fStates.Contains(this))
                                 {
-                                    ctxLength = ctl;
-                                    break;
+                                    //_curX++;
+                                    return (null, true, false);
+                                    //continue;
                                 }
 
-                                if (ctxMinLength > ctxLength)
+                                int ctxMinLength = int.MaxValue;
+                                bool cUf = false;
+
+                                //HashSet<GameSession> gameSessions;
+
+                                //if (!FallingStates.TryGetValue(this, out HashSet<GameSession> v))
+                                //{
+                                //    gameSessions = new HashSet<GameSession>();
+                                //    FallingStates.Add(new GameSession(this), gameSessions);
+                                //}
+                                //else
+                                //    gameSessions = v;
+
+                                while (true)
                                 {
-                                    if (frame == null)
+                                    (GameSession frame, bool end, bool uf) =
+                                        ctx.NextFrame(!isBot, ctx, ref ctxLength, invert, null); //gameSessions);
+
+                                    if (end)
+                                    {
+                                        ctxLength = ctl;
+                                        break;
+                                    }
+
+                                    if (frame is null)
                                     {
                                         ctxLength = ctl;
                                         continue;
                                     }
 
+                                    if (uf)
+                                    {
+                                        if (cUf)
+                                        {
+                                            if (ctxMinLength <= ctxLength)
+                                                continue;
+                                        }
+                                        else
+                                        {
+                                            if (ctxMinLength != int.MaxValue)
+                                                continue;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (cUf)
+                                        {
+                                            // ignored
+                                        }
+                                        else
+                                        {
+                                            if (ctxMinLength <= ctxLength)
+                                                continue;
+                                        }
+                                    }
+
                                     ctxMinLength = ctxLength;
+                                    ctxLength = ctl;
+                                    cUf = uf;
+
+                                    if (ctxMinLength != 0)
+                                        continue;
+
+                                    cUf = false;
+                                    break;
                                 }
 
-                                ctxLength = ctl;
+                                if (ctxMinLength == int.MaxValue)
+                                    continue;
+
+                                _curX++;
+                                ctxLength = ctxMinLength;
+
+                                //if (cUf || !(_lastSolution is null))
+                                return (ctx, false, cUf);
+
+                                //_lastSolution = new GameSession(ctx);
+                                //_lastSet = gameSessions;
+
+                                return (ctx, false, false);
                             }
-
-                            if (ctxMinLength == int.MaxValue)
-                                continue;
-
-                            _curX++;
-                            ctxLength = ctxMinLength;
-                            return (ctx, false);
                         default:
                             throw new ArgumentOutOfRangeException();
                     }
@@ -357,7 +430,7 @@ namespace DynamicSample
             }
 
             ctxLength = ctl;
-            return (null, true);
+            return (null, true, false);
         }
 
         static int[,] GameFieldCopy(int[,] map, bool invert = false)
@@ -370,26 +443,26 @@ namespace DynamicSample
             int[,] result = new int[sX, sY];
 
             for (int y = 0; y < sY; y++)
-            for (int x = 0; x < sX; x++)
-            {
-                if (!invert || map[x, y] == EmptySpace)
+                for (int x = 0; x < sX; x++)
                 {
-                    result[x, y] = map[x, y];
-                    continue;
+                    if (!invert || map[x, y] == EmptySpace)
+                    {
+                        result[x, y] = map[x, y];
+                        continue;
+                    }
+
+                    if (map[x, y] == BotHit)
+                    {
+                        result[x, y] = UserHit;
+                        continue;
+                    }
+
+                    if (map[x, y] != UserHit)
+                        throw new Exception(
+                            $@"Неизвестное значение поля на игровой карте ({map[x, y]}).");
+
+                    result[x, y] = BotHit;
                 }
-
-                if (map[x, y] == BotHit)
-                {
-                    result[x, y] = UserHit;
-                    continue;
-                }
-
-                if (map[x, y] != UserHit)
-                    throw new Exception(
-                        $@"Неизвестное значение поля на игровой карте ({map[x, y]}).");
-
-                result[x, y] = BotHit;
-            }
 
             return result;
         }

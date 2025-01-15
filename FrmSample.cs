@@ -16,6 +16,30 @@ namespace DynamicSample
 
         public FrmSample()
         {
+            object df = new GameSession();
+
+            GameSession ds = df as GameSession;
+
+            bool b = ds.Equals(ds);
+
+            GameSession dss = new GameSession();
+
+            GameSession dc = new GameSession();
+
+            bool b1 = dss.Equals(dc);
+
+            bool b2 = dc.Equals(dss);
+
+            bool b3 = dss.Equals(ds);
+
+            bool b4 = ds.Equals(dss);
+
+            bool b5 = dss.Equals(null); // false
+
+            bool b6 = dc.Equals(null);
+
+            bool b7 = ds.Equals(null);
+
             InitializeComponent();
         }
 
@@ -96,10 +120,7 @@ namespace DynamicSample
         void RefreshGameField(bool createNewGame = false)
         {
             if (createNewGame || _gameSession == null)
-            {
-                _gameSession?.RotateCurrentSession();
                 _gameSession = new GameSession();
-            }
 
             _gameGrFront.Clear(Color.LightGray);
 
