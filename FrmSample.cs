@@ -16,6 +16,30 @@ namespace DynamicSample
 
         public FrmSample()
         {
+            object df = new GameSession();
+
+            GameSession ds = df as GameSession;
+
+            bool b = ds.Equals(ds);
+
+            GameSession dss = new GameSession();
+
+            GameSession dc = new GameSession();
+
+            bool b1 = dss.Equals(dc);
+
+            bool b2 = dc.Equals(dss);
+
+            bool b3 = dss.Equals(ds);
+
+            bool b4 = ds.Equals(dss);
+
+            bool b5 = dss.Equals(null); // false
+
+            bool b6 = dc.Equals(null);
+
+            bool b7 = ds.Equals(null);
+
             InitializeComponent();
         }
 
@@ -110,9 +134,9 @@ namespace DynamicSample
             for (int x = 0; x < 3; x++)
             {
                 if (_gameSession[x, y] == GameSession.UserHit)
-                    DrawX(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+                    DrawX(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
                 if (_gameSession[x, y] == GameSession.BotHit)
-                    DrawZero(x * 161, y * 161, _gameSession.LastHitX == x && _gameSession.LastHitY == y);
+                    DrawZero(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
             }
 
             pbDraw.Refresh();
