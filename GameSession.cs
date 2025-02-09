@@ -31,11 +31,7 @@ namespace DynamicSample
 
         static readonly HashSet<GameSession> FallingStates = new HashSet<GameSession>();
 
-        //static readonly HashSet<GameSession> FallingStatesInverted = new HashSet<GameSession>();
-
         static readonly Dictionary<GameSession, HashSet<GameSession>> CommonSessions = new Dictionary<GameSession, HashSet<GameSession>>();
-
-        //static readonly Dictionary<GameSession, HashSet<GameSession>> CommonSessionsInvert = new Dictionary<GameSession, HashSet<GameSession>>();
 
         public GameSession()
         {
@@ -175,20 +171,6 @@ namespace DynamicSample
             }
         }
 
-        int EmptiesCount
-        {
-            get
-            {
-                int result = 0;
-
-                for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                    for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                        result += Convert.ToInt32(_gameField[x, y] == EmptySpace);
-
-                return result;
-            }
-        }
-
         void HitOnFirstField()
         {
             for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
@@ -239,43 +221,19 @@ namespace DynamicSample
                 if (_lastBotHit is null)
                     return;
 
-                if (_lastBotHit.EmptiesCount > 0)
-                {
-                    if (!_lastBotHit.IsInvert)
-                        //FallingStatesInverted.Add(_lastBotHit);
-                    //else
-                        FallingStates.Add(_lastBotHit);
-                }
-
+                FallingStates.Add(_lastBotHit);
                 _lastBotHit = null;
             }
 
             void AddCommon()
             {
-                //GameSession gf = null;
                 foreach (GameSession gs in GameSessionCopy)
                 {
-                    //if (gs.IsInvert)
-                    //{
-                    //    gf = gs;
-
-
-                    //    continue;
-                    //}
-
                     if (CommonSessions.TryGetValue(gs, out HashSet<GameSession> v))
                         v.Add(gs._lastSolution);
                     else
                         CommonSessions.Add(gs, new HashSet<GameSession> { gs._lastSolution });
                 }
-
-                //if (!(gf is null)) // здесь и обучение должно идти наоборот - надо бить так, чтобы не попасть в эти точки.... а не ОТМЕНЯТЬ ИХ!!
-                //{
-                //    if (CommonSessionsInvert.TryGetValue(gf, out HashSet<GameSession> vi))
-                //        vi.Add(gf._lastSolution);
-                //    else
-                //        CommonSessionsInvert.Add(gf, new HashSet<GameSession> { gf._lastSolution });
-                //}
             }
         }
 
@@ -304,7 +262,6 @@ namespace DynamicSample
         GameSession HowChangeFrame()
         {
             _lastSolution = null;
-            //_lastBotHit = null;
 
             GameSession result = null;
 
@@ -334,61 +291,51 @@ namespace DynamicSample
                     pk = k;
                     resultLength = ctxLength;
                     result = frame;
-                    //result.IsInvert = k == 0;
                     _lastSolution = endSession;
-
-                    //if (resultLength == 0) // Под вопросом - а если мы сможем выиграть?? - OK
-                    //  break;
                 }
 
                 _curY = _curX = 0;
             }
 
-            if (result is null) // разобраться с _lastBotHit, тк его надо присвоить только тогда, когда нет моделей (предположу, что надо устанавливать причину значения null с помощью endSession равного null), и только тогда присваивать
+            if (result is null)
             {
                 _lastBotHit = null;
-                FallingStates.Add(new GameSession(this)); // важно имено так делать, чтобы не мочь вернуться в эту же ситуацию во время продолжения работы
+                FallingStates.Add(new GameSession(this));
                 result = new GameSession(_gameField, false);
                 result.HitOnFirstField();
-                //_lastSolution = new GameSession(result); // в данном случае роли не играет, может, не писать такие случаи... - OK
             }
-            else if (!result.IsInvert) // НА заметку: у ИНВЕРСНЫХ МОДЕЛЕЙ удар инвертирован... - теперь нет...
+            else if (!result.IsInvert)
             {
                 switch (result.CurrentWinner)
                 {
                     case Winner.NOBODY:
-                        int[,] gf = GameFieldCopy(_gameField); // надо было только отсечь ИНВЕРСНЫЕ, а это код не нужен... можно вернуть как было... Т.О. встаёт вопрос о полезности этого кода с _lastBotHit... нет... он ПОЛЕЗЕН!!!
-                        gf[result.HitX, result.HitY] = BotHit; // _lastBotHit полезен, тк отсекает сценарии, которые будут пройдены на автомате, с помощью инверсных моделей...
+                        int[,] gf = GameFieldCopy(_gameField);
+                        gf[result.HitX, result.HitY] = BotHit;
 
-                        GameSession gs = new GameSession(gf, false) // ИТОГ таков: надо было запретить сохранять инверсные удары сюда... и инвертировать удар БОТА (СМ НИЖЕ)
+                        GameSession gs = new GameSession(gf, false)
                         {
                             HitX = result.HitX,
                             HitY = result.HitY
                         };
 
                         _lastBotHit = gs;
-                        // уточнить по поводу значения _lastBotHit, тк значения result и _lastBotHit могут очень сильно различаться
                         break;
                 }
             }
-            else
-            {
-                //result._gameField[result.HitX, result.HitY] = UserHit; // тогда уж так... должно работать и без этого
-            }
-            // надо сделать так, чтобы добавлять карты, для которых нет дороги, в НЕУДАЧНЫЕ - это ответ на "срабатывание только на одношаговые карты победы соперника"
+
             if (!result.IsInvert && !(_lastSolution is null))
                 GameSessionCopy.Add(new GameSession(_gameField, false, _lastSolution));
 
             return result;
         }
-        // можно переделать без флага invert... так проще будет
+
         (GameSession frame, bool end, GameSession endSession) NextFrame(bool isBot, int[,] map, ref int ctxLength, bool invert, GameSession startSession)
         {
             int ctl = ++ctxLength;
 
             if (map == null)
             {
-                map = GameFieldCopy(_gameField); //, false);
+                map = GameFieldCopy(_gameField);
                 ctl = ctxLength = 0;
             }
 
@@ -415,77 +362,21 @@ namespace DynamicSample
                     switch (ctx.CurrentWinner)
                     {
                         case Winner.BOT:
-                            {
-                                _curX++;
+                            _curX++;
 
-                                //if (invert)
-                                {
-                                    //if (CommonSessionsInvert.TryGetValue(startSession, // ВЕСЬ УМ здесь))))))
-                                    //        out HashSet<GameSession>
-                                    //            gsi)) // разделить на модели - как насчет того, чтобы поддердать инверсную модель в пункте USER??
-                                    //    if (gsi.Contains(ctx)) // для отладки
-                                    //        return (null, false, null);
+                            if (CommonSessions.TryGetValue(startSession, out HashSet<GameSession> gss) && gss.Contains(ctx))
+                                return (null, false, null);
 
-                                    //return (ctx, false, new GameSession(ctx));
-                                }
-
-                                if (CommonSessions.TryGetValue(startSession,
-                                        out HashSet<GameSession>
-                                            gss)) // разделить на модели - как насчет того, чтобы поддердать инверсную модель в пункте USER??
-                                    if (gss.Contains(ctx)) // для отладки
-                                        return (null, false, null);
-
-                                return (ctx, false, new GameSession(ctx));
-                            }
+                            return (ctx, false, new GameSession(ctx));
                         case Winner.USER:
                             _curX++;
-                            if (invert)
-                                return (ctx, false, new GameSession(ctx));
-                            //{
-                            //    _curX++;
-
-                            //    if (invert)
-                            //    {
-                            //        if (CommonSessions.TryGetValue(startSession,
-                            //                out HashSet<GameSession>
-                            //                    gss)) // разделить на модели - как насчет того, чтобы поддердать инверсную модель в пункте USER??
-                            //            if (gss.Contains(ctx)) // для отладки
-                            //                return (null, false, null);
-
-                            //        return (ctx, false, new GameSession(ctx));
-                            //    }
-
-                            //    if (CommonSessionsInvert.TryGetValue(startSession,
-                            //            out HashSet<GameSession>
-                            //                gsi)) // разделить на модели - как насчет того, чтобы поддердать инверсную модель в пункте USER??
-                            //        if (gsi.Contains(ctx)) // для отладки
-                            //            return (null, false, null);
-
-                            //    return (ctx, false, new GameSession(ctx));
-                            //}
-                            return (null, false, null);
+                            return invert ? (ctx, false, new GameSession(ctx)) : (null, false, null);
                         case Winner.STANDOFF:
                             _curX++;
                             return (null, false, null);
                         case Winner.NOBODY:
-                            if (invert) // убрать
-                            {
-                                //if (FallingStatesInverted.Contains(this))
-                                //{
-                                //_curX++;
+                            if (invert || FallingStates.Contains(this))
                                 continue;
-                                //return (null, false, null);
-                                //}
-                            }
-                            //else
-                            {
-                                if (FallingStates.Contains(this))
-                                {
-                                    //_curX++;
-                                        //return (null, true, null);
-                                        continue;
-                                }
-                            }
 
                             while (true)
                             {
@@ -507,7 +398,6 @@ namespace DynamicSample
 
                                     ctxMinLength = ctxLength;
                                     es = endSession;
-                                    //break;
                                 }
 
                                 ctxLength = ctl;
@@ -532,7 +422,7 @@ namespace DynamicSample
             return (null, true, null);
         }
 
-        static int[,] GameFieldCopy(int[,] map) //, bool invert = false)
+        static int[,] GameFieldCopy(int[,] map)
         {
             if (map == null)
                 throw new ArgumentNullException(nameof(map));
@@ -543,26 +433,7 @@ namespace DynamicSample
 
             for (int y = 0; y < sY; y++)
                 for (int x = 0; x < sX; x++)
-                {
                     result[x, y] = map[x, y];
-                    //if (/*!invert ||*/ map[x, y] == EmptySpace)
-                    {
-                        
-                      //  continue;
-                    }
-
-                    //if (map[x, y] == BotHit)
-                    //{
-                    //    result[x, y] = UserHit;
-                    //    continue;
-                    //}
-
-                    //if (map[x, y] != UserHit)
-                    //    throw new Exception(
-                    //        $@"Неизвестное значение поля на игровой карте ({map[x, y]}).");
-
-                    //result[x, y] = BotHit;
-                }
 
             return result;
         }
