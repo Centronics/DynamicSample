@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace DynamicSample
 {
@@ -28,8 +29,6 @@ namespace DynamicSample
         static GameSession _lastBotHit;
 
         static readonly List<GameSession> GameSessionCopy = new List<GameSession>();
-
-        static readonly HashSet<GameSession> FallingStates = new HashSet<GameSession>();
 
         static readonly Dictionary<GameSession, HashSet<GameSession>> CommonSessions = new Dictionary<GameSession, HashSet<GameSession>>();
 
@@ -221,7 +220,7 @@ namespace DynamicSample
                 if (_lastBotHit is null)
                     return;
 
-                FallingStates.Add(_lastBotHit);
+                CommonSessions[_lastBotHit] = new HashSet<GameSession>();
                 _lastBotHit = null;
             }
 
@@ -229,10 +228,10 @@ namespace DynamicSample
             {
                 foreach (GameSession gs in GameSessionCopy)
                 {
-                    if (CommonSessions.TryGetValue(gs, out HashSet<GameSession> v))
-                        v.Add(gs._lastSolution);
-                    else
+                    if (!CommonSessions.TryGetValue(gs, out HashSet<GameSession> v))
                         CommonSessions.Add(gs, new HashSet<GameSession> { gs._lastSolution });
+                    else if (v.Any())
+                        v.Add(gs._lastSolution);
                 }
             }
         }
@@ -271,7 +270,7 @@ namespace DynamicSample
                 {
                     int ctxLength = 0;
                     (GameSession frame, bool end, GameSession endSession) =
-                        NextFrame(true, null, ref ctxLength, k == 0, this); // new GameSession(GameFieldCopy(_gameField, k==0), k==0));
+                        NextFrame(true, null, ref ctxLength, k == 0, this);
 
                     if (end)
                         break;
@@ -300,7 +299,7 @@ namespace DynamicSample
             if (result is null)
             {
                 _lastBotHit = null;
-                FallingStates.Add(new GameSession(this));
+                CommonSessions[new GameSession(this)] = new HashSet<GameSession>();
                 result = new GameSession(_gameField, false);
                 result.HitOnFirstField();
             }
@@ -329,8 +328,8 @@ namespace DynamicSample
             return result;
         }
 
-        (GameSession frame, bool end, GameSession endSession) NextFrame(bool isBot, int[,] map, ref int ctxLength, bool invert, GameSession startSession)
-        {
+        (GameSession frame, bool end, GameSession endSession) NextFrame(bool isBot, int[,] map, ref int ctxLength, bool invert, GameSession startSession) // лучше не startSession, а передавать список "исключений" со всех встречных карт
+        {// его надо будет выстраивать соответственно "матрёшке"
             int ctl = ++ctxLength;
 
             if (map == null)
@@ -350,7 +349,7 @@ namespace DynamicSample
                     {
                         _gameField =
                         {
-                            [_curX, _curY] = isBot ? invert ? UserHit : BotHit : invert ? BotHit : UserHit //isBot ? BotHit : UserHit 
+                            [_curX, _curY] = isBot ? invert ? UserHit : BotHit : invert ? BotHit : UserHit
                         },
                         HitX = _curX,
                         HitY = _curY
@@ -364,7 +363,7 @@ namespace DynamicSample
                         case Winner.BOT:
                             _curX++;
 
-                            if (CommonSessions.TryGetValue(startSession, out HashSet<GameSession> gss) && gss.Contains(ctx))
+                            if (CommonSessions.TryGetValue(startSession, out HashSet<GameSession> gss) && (!gss.Any() || gss.Contains(ctx)))
                                 return (null, false, null);
 
                             return (ctx, false, new GameSession(ctx));
@@ -375,7 +374,7 @@ namespace DynamicSample
                             _curX++;
                             return (null, false, null);
                         case Winner.NOBODY:
-                            if (invert || FallingStates.Contains(this))
+                            if (invert || (CommonSessions.TryGetValue(this, out HashSet<GameSession> v) && !v.Any()))
                                 continue;
 
                             while (true)
