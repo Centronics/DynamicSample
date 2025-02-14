@@ -262,6 +262,8 @@ namespace DynamicSample
         {
             _lastSolution = null;
 
+            HashSet<GameSession> cs = CommonSessions.TryGetValue(this, out HashSet<GameSession> v) ? v : new HashSet<GameSession>();
+
             GameSession result = null;
 
             for (int k = 0, pk = -1, resultLength = int.MaxValue; k < 2; k++)
@@ -270,7 +272,7 @@ namespace DynamicSample
                 {
                     int ctxLength = 0;
                     (GameSession frame, bool end, GameSession endSession) =
-                        NextFrame(true, null, ref ctxLength, k == 0, this);
+                        NextFrame(true, null, ref ctxLength, k == 0, cs);
 
                     if (end)
                         break;
@@ -328,8 +330,8 @@ namespace DynamicSample
             return result;
         }
 
-        (GameSession frame, bool end, GameSession endSession) NextFrame(bool isBot, int[,] map, ref int ctxLength, bool invert, GameSession startSession) // лучше не startSession, а передавать список "исключений" со всех встречных карт
-        {// его надо будет выстраивать соответственно "матрёшке"
+        (GameSession frame, bool end, GameSession endSession) NextFrame(bool isBot, int[,] map, ref int ctxLength, bool invert, HashSet<GameSession> commonSessions)
+        {
             int ctl = ++ctxLength;
 
             if (map == null)
@@ -355,6 +357,20 @@ namespace DynamicSample
                         HitY = _curY
                     };
 
+                    HashSet<GameSession> hCommonSessions = null;
+
+                    if (!invert)
+                    {
+                        if (CommonSessions.TryGetValue(ctx, out HashSet<GameSession> vs))
+                        {
+                            hCommonSessions = new HashSet<GameSession>(commonSessions);
+                            foreach (GameSession gs in vs)
+                                hCommonSessions.Add(gs);
+                        }
+                        else
+                            hCommonSessions = commonSessions;
+                    }
+
                     int ctxMinLength = int.MaxValue;
                     GameSession es = null;
 
@@ -362,11 +378,7 @@ namespace DynamicSample
                     {
                         case Winner.BOT:
                             _curX++;
-
-                            if (CommonSessions.TryGetValue(startSession, out HashSet<GameSession> gss) && (!gss.Any() || gss.Contains(ctx)))
-                                return (null, false, null);
-
-                            return (ctx, false, new GameSession(ctx));
+                            return hCommonSessions?.Contains(ctx) ?? true ? (null, false, null) : (ctx, false, new GameSession(ctx));
                         case Winner.USER:
                             _curX++;
                             return invert ? (ctx, false, new GameSession(ctx)) : (null, false, null);
@@ -374,12 +386,12 @@ namespace DynamicSample
                             _curX++;
                             return (null, false, null);
                         case Winner.NOBODY:
-                            if (invert || (CommonSessions.TryGetValue(this, out HashSet<GameSession> v) && !v.Any()))
+                            if (invert || (CommonSessions.TryGetValue(ctx, out HashSet<GameSession> v) && !v.Any()))
                                 continue;
 
                             while (true)
                             {
-                                (GameSession frame, bool end, GameSession endSession) = ctx.NextFrame(!isBot, ctx._gameField, ref ctxLength, false, startSession);
+                                (GameSession frame, bool end, GameSession endSession) = ctx.NextFrame(!isBot, ctx._gameField, ref ctxLength, false, hCommonSessions);
 
                                 if (end)
                                 {
