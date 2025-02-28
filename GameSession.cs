@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace DynamicSample
 {
@@ -14,6 +13,13 @@ namespace DynamicSample
             NOBODY
         }
 
+        public enum InterModel
+        {
+            INVERT,
+            FINDSTANDOFF,
+            TOTAL
+        }
+
         const int EmptySpace = 0;
 
         public static readonly int UserHit = int.MaxValue;
@@ -24,13 +30,9 @@ namespace DynamicSample
 
         int _curX, _curY;
 
-        GameSession _lastSolution;
-
         static GameSession _lastBotHit;
 
-        static readonly List<GameSession> GameSessionCopy = new List<GameSession>();
-
-        static readonly Dictionary<GameSession, HashSet<GameSession>> CommonSessions = new Dictionary<GameSession, HashSet<GameSession>>();
+        static readonly HashSet<GameSession> CommonSessions = new HashSet<GameSession>();
 
         public GameSession()
         {
@@ -41,35 +43,20 @@ namespace DynamicSample
                     _gameField[x, y] = EmptySpace;
         }
 
-        GameSession(int[,] map, bool invert, GameSession lastSolution = null)
+        GameSession(int[,] map, InterModel model)
         {
             if (map == null)
                 throw new ArgumentNullException(nameof(map));
 
             _gameField = GameFieldCopy(map);
-            IsInvert = invert;
-            _lastSolution = lastSolution;
-        }
-
-        GameSession(GameSession gs)
-        {
-            if (gs is null)
-                throw new ArgumentNullException(nameof(gs));
-
-            _gameField = GameFieldCopy(gs._gameField);
-
-            HitX = gs.HitX;
-            HitY = gs.HitY;
-            IsInvert = gs.IsInvert;
-
-            _lastSolution = gs._lastSolution;
+            CurrentModel = model;
         }
 
         public int HitX { get; private set; } = -1;
 
         public int HitY { get; private set; } = -1;
 
-        public bool IsInvert { get; }
+        public InterModel CurrentModel { get; }
 
         public int this[int x, int y] => _gameField[x, y];
 
@@ -195,19 +182,18 @@ namespace DynamicSample
             HitX = x;
             HitY = y;
 
-            switch (CurrentWinner)
+            Winner cw = CurrentWinner;
+
+            switch (cw)
             {
                 case Winner.BOT:
                     _lastBotHit = null;
-                    GameSessionCopy.Clear();
                     break;
                 case Winner.NOBODY:
                     break;
                 case Winner.USER:
                 case Winner.STANDOFF:
-                    AddFall();
-                    AddCommon();
-                    GameSessionCopy.Clear();
+                    AddFall(cw);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -215,24 +201,23 @@ namespace DynamicSample
 
             return true;
 
-            void AddFall()
+            void AddFall(Winner currentWinner)
             {
                 if (_lastBotHit is null)
                     return;
 
-                CommonSessions[_lastBotHit] = new HashSet<GameSession>();
-                _lastBotHit = null;
-            }
-
-            void AddCommon()
-            {
-                foreach (GameSession gs in GameSessionCopy)
+                switch (currentWinner)
                 {
-                    if (!CommonSessions.TryGetValue(gs, out HashSet<GameSession> v))
-                        CommonSessions.Add(gs, new HashSet<GameSession> { gs._lastSolution });
-                    else if (v.Any())
-                        v.Add(gs._lastSolution);
+                    case Winner.USER:
+                        CommonSessions.Add(_lastBotHit);
+                        break;
+                    case Winner.STANDOFF:
+                        if (_lastBotHit.CurrentModel == InterModel.TOTAL)
+                            CommonSessions.Add(_lastBotHit);
+                        break;
                 }
+
+                _lastBotHit = null;
             }
         }
 
@@ -260,19 +245,15 @@ namespace DynamicSample
 
         GameSession HowChangeFrame()
         {
-            _lastSolution = null;
-
-            HashSet<GameSession> cs = CommonSessions.TryGetValue(this, out HashSet<GameSession> v) ? v : new HashSet<GameSession>();
-
             GameSession result = null;
 
-            for (int k = 0, pk = -1, resultLength = int.MaxValue; k < 2; k++)
+            for (int k = 0, pk = -1, resultLength = int.MaxValue; k < 3; k++)
             {
                 while (true)
                 {
                     int ctxLength = 0;
-                    (GameSession frame, bool end, GameSession endSession) =
-                        NextFrame(true, null, ref ctxLength, k == 0, cs);
+                    (GameSession frame, bool end) =
+                        NextFrame(true, null, ref ctxLength, (InterModel)k);
 
                     if (end)
                         break;
@@ -280,19 +261,18 @@ namespace DynamicSample
                     if (frame is null)
                         continue;
 
+                    if (k == 0 && ctxLength != 0)
+                        continue;
+
                     if (ctxLength > resultLength)
                         continue;
 
-                    if (k == 0 && ctxLength > 0)
-                        continue;
-
-                    if (k <= pk && ctxLength == resultLength)
+                    if (k == pk && ctxLength == resultLength)
                         continue;
 
                     pk = k;
                     resultLength = ctxLength;
                     result = frame;
-                    _lastSolution = endSession;
                 }
 
                 _curY = _curX = 0;
@@ -300,12 +280,10 @@ namespace DynamicSample
 
             if (result is null)
             {
-                _lastBotHit = null;
-                CommonSessions[new GameSession(this)] = new HashSet<GameSession>();
-                result = new GameSession(_gameField, false);
+                result = new GameSession(_gameField, InterModel.TOTAL);
                 result.HitOnFirstField();
             }
-            else if (!result.IsInvert)
+            else if (result.CurrentModel != InterModel.INVERT)
             {
                 switch (result.CurrentWinner)
                 {
@@ -313,24 +291,23 @@ namespace DynamicSample
                         int[,] gf = GameFieldCopy(_gameField);
                         gf[result.HitX, result.HitY] = BotHit;
 
-                        GameSession gs = new GameSession(gf, false)
+                        GameSession gs = new GameSession(gf, InterModel.TOTAL)
                         {
                             HitX = result.HitX,
                             HitY = result.HitY
                         };
 
-                        _lastBotHit = gs;
+                        if (!CommonSessions.Contains(gs))
+                            _lastBotHit = gs;
+
                         break;
                 }
             }
 
-            if (!result.IsInvert && !(_lastSolution is null))
-                GameSessionCopy.Add(new GameSession(_gameField, false, _lastSolution));
-
             return result;
         }
 
-        (GameSession frame, bool end, GameSession endSession) NextFrame(bool isBot, int[,] map, ref int ctxLength, bool invert, HashSet<GameSession> commonSessions)
+        (GameSession frame, bool end) NextFrame(bool isBot, int[,] map, ref int ctxLength, InterModel model)
         {
             int ctl = ++ctxLength;
 
@@ -347,51 +324,43 @@ namespace DynamicSample
                     if (map[_curX, _curY] != EmptySpace)
                         continue;
 
-                    GameSession ctx = new GameSession(map, invert)
+                    GameSession ctx = new GameSession(map, model)
                     {
                         _gameField =
                         {
-                            [_curX, _curY] = isBot ? invert ? UserHit : BotHit : invert ? BotHit : UserHit
+                            [_curX, _curY] = isBot ? model == InterModel.INVERT ? UserHit : BotHit : model == InterModel.INVERT ? BotHit : UserHit
                         },
                         HitX = _curX,
                         HitY = _curY
                     };
 
-                    HashSet<GameSession> hCommonSessions = null;
-
-                    if (!invert)
-                    {
-                        if (CommonSessions.TryGetValue(ctx, out HashSet<GameSession> vs))
-                        {
-                            hCommonSessions = new HashSet<GameSession>(commonSessions);
-                            foreach (GameSession gs in vs)
-                                hCommonSessions.Add(gs);
-                        }
-                        else
-                            hCommonSessions = commonSessions;
-                    }
+                    if (model != InterModel.INVERT && CommonSessions.Contains(ctx))
+                            continue;
 
                     int ctxMinLength = int.MaxValue;
-                    GameSession es = null;
 
                     switch (ctx.CurrentWinner)
                     {
                         case Winner.BOT:
                             _curX++;
-                            return hCommonSessions?.Contains(ctx) ?? true ? (null, false, null) : (ctx, false, new GameSession(ctx));
+                            if (model == InterModel.FINDSTANDOFF)
+                                return (null, false);
+                            return CommonSessions.Contains(ctx) ? (null, false) : (ctx, false);
                         case Winner.USER:
                             _curX++;
-                            return invert ? (ctx, false, new GameSession(ctx)) : (null, false, null);
+                            return model == InterModel.INVERT ? (ctx, false) : (null, false);
                         case Winner.STANDOFF:
                             _curX++;
-                            return (null, false, null);
+                            if (model != InterModel.FINDSTANDOFF)
+                                return (null, false);
+                            return CommonSessions.Contains(ctx) ? (null, false) : (ctx, false);
                         case Winner.NOBODY:
-                            if (invert || (CommonSessions.TryGetValue(ctx, out HashSet<GameSession> v) && !v.Any()))
+                            if (model == InterModel.INVERT || CommonSessions.Contains(ctx))
                                 continue;
 
                             while (true)
                             {
-                                (GameSession frame, bool end, GameSession endSession) = ctx.NextFrame(!isBot, ctx._gameField, ref ctxLength, false, hCommonSessions);
+                                (GameSession frame, bool end) = ctx.NextFrame(!isBot, ctx._gameField, ref ctxLength, model);
 
                                 if (end)
                                 {
@@ -408,7 +377,6 @@ namespace DynamicSample
                                     }
 
                                     ctxMinLength = ctxLength;
-                                    es = endSession;
                                 }
 
                                 ctxLength = ctl;
@@ -420,7 +388,7 @@ namespace DynamicSample
                             _curX++;
                             ctxLength = ctxMinLength;
 
-                            return (ctx, false, es);
+                            return (ctx, false);
                         default:
                             throw new ArgumentOutOfRangeException();
                     }
@@ -430,7 +398,7 @@ namespace DynamicSample
             }
 
             ctxLength = ctl;
-            return (null, true, null);
+            return (null, true);
         }
 
         static int[,] GameFieldCopy(int[,] map)
