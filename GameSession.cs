@@ -15,8 +15,9 @@ namespace DynamicSample
 
         public enum InterModel
         {
+            NULL,
+            STANDOFF,
             INVERT,
-            FINDSTANDOFF,
             TOTAL
         }
 
@@ -32,7 +33,9 @@ namespace DynamicSample
 
         static GameSession _lastBotHit;
 
-        static readonly HashSet<GameSession> CommonSessions = new HashSet<GameSession>();
+        static readonly HashSet<GameSession> SessionsStandoff = new HashSet<GameSession>();
+
+        static readonly HashSet<GameSession> SessionsTotal = new HashSet<GameSession>();
 
         public GameSession()
         {
@@ -157,21 +160,6 @@ namespace DynamicSample
             }
         }
 
-        void HitOnFirstField()
-        {
-            for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                    if (_gameField[x, y] == EmptySpace)
-                    {
-                        _gameField[x, y] = BotHit;
-                        HitX = x;
-                        HitY = y;
-                        return;
-                    }
-
-            throw new Exception(@"Неизвестная ошибка.");
-        }
-
         public bool MakeUserHit(int x, int y)
         {
             if (_gameField[x, y] != EmptySpace)
@@ -193,32 +181,33 @@ namespace DynamicSample
                     break;
                 case Winner.USER:
                 case Winner.STANDOFF:
-                    AddFall(cw);
+
+                    if (_lastBotHit is null)
+                        return true;
+
+                    switch (_lastBotHit.CurrentModel)
+                    {
+                        case InterModel.STANDOFF:
+                            if (cw != Winner.STANDOFF)
+                                SessionsStandoff.Add(_lastBotHit);
+                            break;
+                        case InterModel.TOTAL:
+                            SessionsTotal.Add(_lastBotHit);
+                            if (cw == Winner.USER)
+                                SessionsStandoff.Add(_lastBotHit);
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+
+                    _lastBotHit = null;
+
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
 
             return true;
-
-            void AddFall(Winner currentWinner)
-            {
-                if (_lastBotHit is null)
-                    return;
-
-                switch (currentWinner)
-                {
-                    case Winner.USER:
-                        CommonSessions.Add(_lastBotHit);
-                        break;
-                    case Winner.STANDOFF:
-                        if (_lastBotHit.CurrentModel == InterModel.TOTAL)
-                            CommonSessions.Add(_lastBotHit);
-                        break;
-                }
-
-                _lastBotHit = null;
-            }
         }
 
         public bool MakeBotHit()
@@ -246,22 +235,24 @@ namespace DynamicSample
         GameSession HowChangeFrame()
         {
             GameSession result = null;
+            int resultLength = int.MaxValue;
 
-            for (int k = 0, pk = -1, resultLength = int.MaxValue; k < 3; k++)
+            for (InterModel k = 0, pk = 0; k < (InterModel)4; k++)
             {
                 while (true)
                 {
                     int ctxLength = 0;
                     (GameSession frame, bool end) =
-                        NextFrame(true, null, ref ctxLength, (InterModel)k);
+                        NextFrame(true, null, ref ctxLength, k);
 
                     if (end)
+                    {
+                        if (!(frame is null))
+                            result = frame;
                         break;
+                    }
 
                     if (frame is null)
-                        continue;
-
-                    if (k == 0 && ctxLength != 0)
                         continue;
 
                     if (ctxLength > resultLength)
@@ -279,29 +270,32 @@ namespace DynamicSample
             }
 
             if (result is null)
+                throw new InvalidOperationException($@"{nameof(result)} почему-то null...");
+
+            if (result.CurrentModel == InterModel.NULL || result.CurrentModel == InterModel.INVERT)
+                return result;
+            
+            int[,] gf = GameFieldCopy(_gameField);
+            gf[result.HitX, result.HitY] = BotHit;
+
+            GameSession gs = new GameSession(gf, result.CurrentModel)
             {
-                result = new GameSession(_gameField, InterModel.TOTAL);
-                result.HitOnFirstField();
-            }
-            else if (result.CurrentModel != InterModel.INVERT)
+                HitX = result.HitX,
+                HitY = result.HitY
+            };
+
+            switch (result.CurrentModel)
             {
-                switch (result.CurrentWinner)
-                {
-                    case Winner.NOBODY:
-                        int[,] gf = GameFieldCopy(_gameField);
-                        gf[result.HitX, result.HitY] = BotHit;
-
-                        GameSession gs = new GameSession(gf, InterModel.TOTAL)
-                        {
-                            HitX = result.HitX,
-                            HitY = result.HitY
-                        };
-
-                        if (!CommonSessions.Contains(gs))
-                            _lastBotHit = gs;
-
-                        break;
-                }
+                case InterModel.STANDOFF:
+                    if (!SessionsStandoff.Contains(gs))
+                        _lastBotHit = gs;
+                    break;
+                case InterModel.TOTAL:
+                    if (!SessionsTotal.Contains(gs))
+                        _lastBotHit = gs;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
 
             return result;
@@ -334,8 +328,23 @@ namespace DynamicSample
                         HitY = _curY
                     };
 
-                    if (model != InterModel.INVERT && CommonSessions.Contains(ctx))
-                            continue;
+                    switch (model)
+                    {
+                        case InterModel.NULL:
+                            return (ctx, true);
+                        case InterModel.STANDOFF:
+                            if (SessionsStandoff.Contains(ctx))
+                                continue;
+                            break;
+                        case InterModel.INVERT:
+                            break;
+                        case InterModel.TOTAL:
+                            if (SessionsTotal.Contains(ctx))
+                                continue;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException(nameof(model), model, null);
+                    }
 
                     int ctxMinLength = int.MaxValue;
 
@@ -343,19 +352,19 @@ namespace DynamicSample
                     {
                         case Winner.BOT:
                             _curX++;
-                            if (model == InterModel.FINDSTANDOFF)
+                            if (model != InterModel.TOTAL)
                                 return (null, false);
-                            return CommonSessions.Contains(ctx) ? (null, false) : (ctx, false);
+                            return SessionsTotal.Contains(ctx) ? (null, false) : (ctx, false);
                         case Winner.USER:
                             _curX++;
                             return model == InterModel.INVERT ? (ctx, false) : (null, false);
                         case Winner.STANDOFF:
                             _curX++;
-                            if (model != InterModel.FINDSTANDOFF)
+                            if (model != InterModel.STANDOFF)
                                 return (null, false);
-                            return CommonSessions.Contains(ctx) ? (null, false) : (ctx, false);
+                            return SessionsTotal.Contains(ctx) ? (null, false) : (ctx, false);
                         case Winner.NOBODY:
-                            if (model == InterModel.INVERT || CommonSessions.Contains(ctx))
+                            if (model == InterModel.INVERT || SessionsTotal.Contains(ctx))
                                 continue;
 
                             while (true)
