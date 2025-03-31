@@ -36,24 +36,26 @@
             // pbDraw
             // 
             this.pbDraw.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.pbDraw.Location = new System.Drawing.Point(12, 12);
+            this.pbDraw.Location = new System.Drawing.Point(24, 23);
+            this.pbDraw.Margin = new System.Windows.Forms.Padding(6);
             this.pbDraw.Name = "pbDraw";
-            this.pbDraw.Size = new System.Drawing.Size(483, 483);
+            this.pbDraw.Size = new System.Drawing.Size(964, 927);
             this.pbDraw.TabIndex = 3;
             this.pbDraw.TabStop = false;
             this.pbDraw.MouseClick += new System.Windows.Forms.MouseEventHandler(this.PbDraw_MouseClick);
             // 
             // FrmSample
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(12F, 25F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(506, 505);
+            this.ClientSize = new System.Drawing.Size(1012, 971);
             this.Controls.Add(this.pbDraw);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.KeyPreview = true;
+            this.Margin = new System.Windows.Forms.Padding(6);
             this.MaximizeBox = false;
-            this.MinimumSize = new System.Drawing.Size(366, 150);
+            this.MinimumSize = new System.Drawing.Size(706, 223);
             this.Name = "FrmSample";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Испытательная задача. Крестики-нолики.";

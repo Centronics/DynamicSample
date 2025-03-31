@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Windows.Forms;
 
+
 namespace DynamicSample
 {
     internal static class Program
@@ -11,9 +12,13 @@ namespace DynamicSample
         [STAThread]
         static void Main()
         {
+            
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new FrmSample());
         }
+
+        
     }
 }

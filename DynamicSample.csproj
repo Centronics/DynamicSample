@@ -59,11 +59,25 @@
     <ApplicationIcon>XOIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="DynamicParser">
+      <HintPath>..\..\Mac\Home\Documents\CENTRONICS\Программы\Системы программирования\ДИС\DynamicMosaicRelease_30\Скомпилировано\DynamicParser.dll</HintPath>
+    </Reference>
+    <Reference Include="DynamicProcessor">
+      <HintPath>..\..\Mac\Home\Documents\CENTRONICS\Программы\Системы программирования\ДИС\DynamicMosaicRelease_30\Скомпилировано\DynamicProcessor.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FrmGameBot.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FrmGameBot.Designer.cs">
+      <DependentUpon>FrmGameBot.cs</DependentUpon>
+    </Compile>
     <Compile Include="FrmSample.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -74,6 +88,9 @@
     <Compile Include="HashCreator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="FrmGameBot.resx">
+      <DependentUpon>FrmGameBot.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="FrmSample.resx">
       <DependentUpon>FrmSample.cs</DependentUpon>
     </EmbeddedResource>
@@ -113,6 +130,17 @@
       <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>false</Install>
     </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpDX">
+      <Version>4.2.0</Version>
+    </PackageReference>
+    <PackageReference Include="SharpDX.Direct3D11">
+      <Version>4.2.0</Version>
+    </PackageReference>
+    <PackageReference Include="SharpDX.DXGI">
+      <Version>4.2.0</Version>
+    </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

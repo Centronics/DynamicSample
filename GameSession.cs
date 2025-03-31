@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using DynamicParser;
+using DynamicProcessor;
 
 namespace DynamicSample
 {
@@ -21,7 +23,7 @@ namespace DynamicSample
             TOTAL
         }
 
-        const int EmptySpace = 0;
+        public static readonly int EmptyHit = 0;
 
         public static readonly int UserHit = int.MaxValue;
 
@@ -43,7 +45,7 @@ namespace DynamicSample
 
             for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
                 for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                    _gameField[x, y] = EmptySpace;
+                    _gameField[x, y] = EmptyHit;
         }
 
         GameSession(int[,] map, InterModel model)
@@ -119,7 +121,7 @@ namespace DynamicSample
 
                 for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
                     for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                        if (_gameField[x, y] == EmptySpace)
+                        if (_gameField[x, y] == EmptyHit)
                             return Winner.NOBODY;
 
                 return Winner.STANDOFF;
@@ -162,7 +164,7 @@ namespace DynamicSample
 
         public bool MakeUserHit(int x, int y)
         {
-            if (_gameField[x, y] != EmptySpace)
+            if (_gameField[x, y] != EmptyHit)
                 return false;
 
             _gameField[x, y] = UserHit;
@@ -220,7 +222,7 @@ namespace DynamicSample
             int x = p.HitX;
             int y = p.HitY;
 
-            if (_gameField[x, y] != EmptySpace)
+            if (_gameField[x, y] != EmptyHit)
                 throw new Exception(
                     $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
 
@@ -315,7 +317,7 @@ namespace DynamicSample
             {
                 for (int mMainX = map.GetLength(0); _curX < mMainX; _curX++)
                 {
-                    if (map[_curX, _curY] != EmptySpace)
+                    if (map[_curX, _curY] != EmptyHit)
                         continue;
 
                     GameSession ctx = new GameSession(map, model)

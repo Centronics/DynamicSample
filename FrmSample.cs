@@ -21,9 +21,14 @@ namespace DynamicSample
 
         void PbDraw_MouseClick(object sender, MouseEventArgs e)
         {
+            FrmGameBot gsd = new FrmGameBot(); // делать только если ключ указан... в САМОМ начале программы
+            gsd.ShowDialog();
+
+            //return;
+
             try
             {
-                if (!_gameSession.MakeUserHit(e.X / 161, e.Y / 161))
+                if (!_gameSession.MakeUserHit(e.X / 161, e.Y / 161)) // НЕ делать фиксу, а делить на три
                     return;
 
                 RefreshGameField();
@@ -71,7 +76,6 @@ namespace DynamicSample
         {
             pbDraw.Image = _gameCanvas = new Bitmap(pbDraw.Width, pbDraw.Height);
             _gameGrFront = Graphics.FromImage(_gameCanvas);
-
             RefreshGameField();
         }
 
@@ -100,20 +104,20 @@ namespace DynamicSample
 
             _gameGrFront.Clear(Color.LightGray);
 
-            _gameGrFront.DrawRectangle(BlackPen, 161, 0, 2, pbDraw.Height);
+            _gameGrFront.DrawRectangle(BlackPen, 161, 0, 2, pbDraw.Height); // фикса!
             _gameGrFront.DrawRectangle(BlackPen, 322, 0, 2, pbDraw.Height);
 
             _gameGrFront.DrawRectangle(BlackPen, 0, 161, pbDraw.Width, 2);
             _gameGrFront.DrawRectangle(BlackPen, 0, 322, pbDraw.Width, 2);
 
             for (int y = 0; y < 3; y++)
-            for (int x = 0; x < 3; x++)
-            {
-                if (_gameSession[x, y] == GameSession.UserHit)
-                    DrawX(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
-                if (_gameSession[x, y] == GameSession.BotHit)
-                    DrawZero(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
-            }
+                for (int x = 0; x < 3; x++)
+                {
+                    if (_gameSession[x, y] == GameSession.UserHit)
+                        DrawX(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
+                    if (_gameSession[x, y] == GameSession.BotHit)
+                        DrawZero(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
+                }
 
             pbDraw.Refresh();
 
