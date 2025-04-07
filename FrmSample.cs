@@ -35,13 +35,7 @@ namespace DynamicSample
 
                 if (_gameSession.CurrentWinner == GameSession.Winner.NOBODY)
                 {
-                    if (!_gameSession.MakeBotHit())
-                    {
-                        MessageBox.Show(@"Ничья, никто не сможет выиграть!");
-                        RefreshGameField(true);
-                        return;
-                    }
-
+                    _gameSession.MakeBotHit();
                     RefreshGameField();
                 }
 

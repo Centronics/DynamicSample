@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
@@ -29,8 +28,13 @@ namespace DynamicSample
                 public Point Coords { get; set; }
                 public List<int> Data { get; set; }
 
+                Bitmap _intBmp;
+
                 public Bitmap GetBitmap()
                 {
+                    if (!(_intBmp is null))
+                        return _intBmp;
+
                     int mx = FieldSize.Width, my = FieldSize.Height;
                     List<int> data = Data;
 
@@ -39,6 +43,8 @@ namespace DynamicSample
                     for (int y = 0; y < my; y++)
                         for (int x = 0; x < mx; x++)
                             bmp.SetPixel(x, y, Color.FromArgb(data[mx * y + x]));
+
+                    _intBmp = bmp;
 
                     return bmp;
                 }
@@ -160,7 +166,7 @@ namespace DynamicSample
             return result;
         }
 
-        void pictureBox1_MouseClick(object sender, MouseEventArgs e)
+        void PictureBox1_MouseClick(object sender, MouseEventArgs e)
         {
             if (radFirstClick.Checked)
             {
@@ -172,7 +178,7 @@ namespace DynamicSample
                 _lastClickBuf = e.Location;
         }
 
-        void btnSavePosition_Click(object sender, EventArgs e)
+        void BtnSavePosition_Click(object sender, EventArgs e)
         {
             if (radFirstClick.Checked)
             {
@@ -244,7 +250,7 @@ namespace DynamicSample
             CurrentSettings.Spaces.Add(bi1);
         }
 
-        void btnClearPosition_Click(object sender, EventArgs e)
+        void BtnClearPosition_Click(object sender, EventArgs e)
         {
             if (radFirstClick.Checked)
             {
@@ -261,9 +267,6 @@ namespace DynamicSample
             if (radEmptySpace.Checked || radField_X.Checked || radField_O.Checked)
                 CurrentSettings.Spaces.Clear();
         }
-
-
-        int[,] _gameField;
 
         static bool BitmapCompare(Bitmap btm1, Bitmap btm2)
         {
@@ -352,7 +355,7 @@ namespace DynamicSample
             return result;
         }
 
-        static Point? GetUserHitPoint(int[,] map1, int[,] map2)
+        static Point? GetUserHitPoint(int[,] map1, GameSession map2)
         {
             Point? result = null;
 
@@ -383,28 +386,40 @@ namespace DynamicSample
             return result;
         }
 
-        static int? GetFirstHit(int[,] map)
+        static int GetMyHero(int[,] map, int x, int y)
         {
-            int? result = null;
+            int v = map[x, y];
 
-            for (int y = 0; y < 3; y++)
-                for (int x = 0; x < 3; x++)
-                {
-                    if (map[x, y] == GameSession.EmptyHit)
-                        continue;
+            if (v == GameSession.BotHit)
+                return GameSession.UserHit;
+            if (v == GameSession.UserHit)
+                return GameSession.BotHit;
 
-                    if (result.HasValue)
-                        return null;
+            throw new UnauthorizedAccessException();
 
-                    result = map[x, y];
-                }
+            //int? result = null;
 
-            return result;
+            //for (int y = 0; y < 3; y++)
+            //    for (int x = 0; x < 3; x++)
+            //    {
+            //        if (map[x, y] == GameSession.EmptyHit)
+            //            continue;
+
+            //        if (result.HasValue)
+            //            return null;
+
+            //        result = map[x, y];
+            //    }
+
+            //return result;
         }
 
         void GameThreadFunction()
         {
             GameSession gameSession = new GameSession();
+            int[,] sessionCopy = new int[3, 3];
+            int amIxo = GameSession.EmptyHit;
+            bool fClicked = false;
 
             try
             {
@@ -419,10 +434,20 @@ namespace DynamicSample
 
                         Bitmap b = GetFrameNow();
 
-                        if (b is null)
+                        if (b is null || IsPlayingStopped())
                             break;
 
+                        if (!fClicked && CurrentSettings.FirstClick.HasValue)
+                        {
+                            MouseClickMethods.ClickMouse(CurrentSettings.FirstClick.Value);
+                            fClicked = true;
+                        }
+
                         IEnumerable<Processor> pq = CurrentSettings.Spaces.Select(bi => new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), b), @"Z"));
+
+                        if (IsPlayingStopped())
+                            break;
+
                         List<SearchResults> results = new List<SearchResults>(pq.Select(p => p.GetEqual(req)));
 
                         // поля получил и запросы написал, теперь надо отследить изменения - НАДО сформировать поле и дисгностировать его на предмет статуса игры
@@ -430,25 +455,60 @@ namespace DynamicSample
                         if (IsPlayingStopped())
                             break;
 
+                        if (results.Count != 9)
+                            throw new InvalidOperationException($@"{nameof(results)} не равно 9: {results.Count}");
 
+                        for (int k = 0; k < 9; k++)
+                        {
+                            if (IsPlayingStopped())
+                                return;
 
-                        // считается, что массив карт упорядочен слева направо, сверху вниз, т.о. получается, что определять место удара по координатам не надо
-                        if (!gameSession.MakeUserHit(e.X / 161, e.Y / 161)) // НЕ делать фиксу, а делить на три
-                            return;
+                            ProcPerc pp = results[k][0, 0];
 
-                        RefreshGameField();
+                            if (pp.Procs.Length != 1)
+                                throw new ArgumentException($@"Неоднозначность ({pp.Procs.Length}).");
+
+                            int x = k % 3;
+                            int y = k / 3;
+
+                            switch (pp.Procs[0].Tag[0])
+                            {
+                                case 'X':
+                                    sessionCopy[x, y] = GameSession.UserHit;
+                                    break;
+
+                                case 'O':
+                                    sessionCopy[x, y] = GameSession.BotHit;
+                                    break;
+
+                                case 'E':
+                                    sessionCopy[x, y] = GameSession.EmptyHit;
+                                    break;
+
+                                default:
+                                    throw new Exception();
+                            }
+                        }
+
+                        if (IsPlayingStopped())
+                            break;
+
+                        Point? userHit = GetUserHitPoint(sessionCopy, gameSession);
+
+                        if (!userHit.HasValue)
+                            continue;
+
+                        if (amIxo == GameSession.EmptyHit)
+                            amIxo = GetMyHero(sessionCopy, userHit.Value.X, userHit.Value.Y);
+
+                        if (!gameSession.MakeUserHit(userHit.Value.X, userHit.Value.Y))
+                            throw new InvalidOperationException(@"Ударить не получилось.");
 
                         if (gameSession.CurrentWinner == GameSession.Winner.NOBODY)
-                        {
-                            if (!gameSession.MakeBotHit())
-                            {
-                                MessageBox.Show(@"Ничья, никто не сможет выиграть!");
-                                RefreshGameField(true);
-                                return;
-                            }
+                            gameSession.MakeBotHit();
 
-                            RefreshGameField();
-                        }
+                        if (IsPlayingStopped())
+                            break;
 
                         switch (gameSession.CurrentWinner)
                         {
@@ -456,15 +516,26 @@ namespace DynamicSample
                                 return;
                             case GameSession.Winner.STANDOFF:
                                 MessageBox.Show(@"Ничья!");
-                                RefreshGameField(true);
                                 return;
                             case GameSession.Winner.USER:
-                                MessageBox.Show(@"Ты выиграл!");
-                                RefreshGameField(true);
+
+                                MessageBox.Show(amIxo == GameSession.BotHit ? @"Я выиграл!" : @"Соперник выиграл!");
+
+                                GetFrameNow();
+
+                                if (CurrentSettings.LastClick.HasValue)
+                                    MouseClickMethods.ClickMouse(CurrentSettings.LastClick.Value);
+
                                 return;
                             case GameSession.Winner.BOT:
-                                MessageBox.Show(@"Компьютер выиграл!");
-                                RefreshGameField(true);
+
+                                MessageBox.Show(amIxo == GameSession.UserHit ? @"Я выиграл!" : @"Соперник выиграл!");
+
+                                GetFrameNow();
+
+                                if (CurrentSettings.LastClick.HasValue)
+                                    MouseClickMethods.ClickMouse(CurrentSettings.LastClick.Value);
+
                                 return;
                             default:
                                 throw new ArgumentOutOfRangeException();
@@ -492,17 +563,17 @@ namespace DynamicSample
 
         bool _inGame;
 
-        private void pbScreenField_MouseLeave(object sender, EventArgs e)
+        void PbScreenField_MouseLeave(object sender, EventArgs e)
         {
             _inGame = false;
         }
 
-        private void pbScreenField_MouseEnter(object sender, EventArgs e)
+        void PbScreenField_MouseEnter(object sender, EventArgs e)
         {
             _inGame = true;
         }
 
-        void btnGameStart_Click(object sender, EventArgs e)
+        void BtnGameStart_Click(object sender, EventArgs e)
         {
             CurrentSettings.MainWindowRect = GameFieldRect;
 

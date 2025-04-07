@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using DynamicParser;
 using DynamicProcessor;
 
@@ -212,12 +213,9 @@ namespace DynamicSample
             return true;
         }
 
-        public bool MakeBotHit()
+        public void MakeBotHit()
         {
-            GameSession p = HowChangeFrame();
-
-            if (p is null)
-                return false;
+            GameSession p = HowChangeFrame() ?? throw new InvalidDataException();
 
             int x = p.HitX;
             int y = p.HitY;
@@ -230,8 +228,6 @@ namespace DynamicSample
 
             HitX = x;
             HitY = y;
-
-            return true;
         }
 
         GameSession HowChangeFrame()

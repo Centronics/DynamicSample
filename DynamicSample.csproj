@@ -88,6 +88,7 @@
     <Compile Include="HashCreator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SendInput.cs" />
     <EmbeddedResource Include="FrmGameBot.resx">
       <DependentUpon>FrmGameBot.cs</DependentUpon>
     </EmbeddedResource>

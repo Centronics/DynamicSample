@@ -58,9 +58,9 @@
             this.pbScreenField.Size = new System.Drawing.Size(84, 132);
             this.pbScreenField.TabIndex = 0;
             this.pbScreenField.TabStop = false;
-            this.pbScreenField.MouseClick += new System.Windows.Forms.MouseEventHandler(this.pictureBox1_MouseClick);
-            this.pbScreenField.MouseEnter += new System.EventHandler(this.pbScreenField_MouseEnter);
-            this.pbScreenField.MouseLeave += new System.EventHandler(this.pbScreenField_MouseLeave);
+            this.pbScreenField.MouseClick += new System.Windows.Forms.MouseEventHandler(this.PictureBox1_MouseClick);
+            this.pbScreenField.MouseEnter += new System.EventHandler(this.PbScreenField_MouseEnter);
+            this.pbScreenField.MouseLeave += new System.EventHandler(this.PbScreenField_MouseLeave);
             // 
             // radField_X
             // 
@@ -97,7 +97,7 @@
             this.btnSavePosition.TabIndex = 3;
             this.btnSavePosition.Text = "OK";
             this.btnSavePosition.UseVisualStyleBackColor = true;
-            this.btnSavePosition.Click += new System.EventHandler(this.btnSavePosition_Click);
+            this.btnSavePosition.Click += new System.EventHandler(this.BtnSavePosition_Click);
             // 
             // radEmptySpace
             // 
@@ -121,7 +121,7 @@
             this.btnClearPosition.TabIndex = 5;
             this.btnClearPosition.Text = "X";
             this.btnClearPosition.UseVisualStyleBackColor = true;
-            this.btnClearPosition.Click += new System.EventHandler(this.btnClearPosition_Click);
+            this.btnClearPosition.Click += new System.EventHandler(this.BtnClearPosition_Click);
             // 
             // radClickAfter
             // 
@@ -158,7 +158,7 @@
             this.btnGameStart.TabIndex = 8;
             this.btnGameStart.Text = "Старт";
             this.btnGameStart.UseVisualStyleBackColor = true;
-            this.btnGameStart.Click += new System.EventHandler(this.btnGameStart_Click);
+            this.btnGameStart.Click += new System.EventHandler(this.BtnGameStart_Click);
             // 
             // cbxProfiles
             // 
