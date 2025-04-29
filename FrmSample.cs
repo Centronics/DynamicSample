@@ -21,8 +21,7 @@ namespace DynamicSample
 
         void PbDraw_MouseClick(object sender, MouseEventArgs e)
         {
-            FrmGameBot gsd = new FrmGameBot(); // делать только если ключ указан... в САМОМ начале программы
-            gsd.ShowDialog();
+            
 
             //return;
 
@@ -98,7 +97,7 @@ namespace DynamicSample
 
             _gameGrFront.Clear(Color.LightGray);
 
-            _gameGrFront.DrawRectangle(BlackPen, 161, 0, 2, pbDraw.Height); // фикса!
+            _gameGrFront.DrawRectangle(BlackPen, 161, 0, 2, pbDraw.Height); // фикса! - делить на 3
             _gameGrFront.DrawRectangle(BlackPen, 322, 0, 2, pbDraw.Height);
 
             _gameGrFront.DrawRectangle(BlackPen, 0, 161, pbDraw.Width, 2);

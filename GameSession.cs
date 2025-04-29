@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using DynamicParser;
 using DynamicProcessor;
@@ -213,7 +214,7 @@ namespace DynamicSample
             return true;
         }
 
-        public void MakeBotHit()
+        public Point MakeBotHit()
         {
             GameSession p = HowChangeFrame() ?? throw new InvalidDataException();
 
@@ -228,6 +229,8 @@ namespace DynamicSample
 
             HitX = x;
             HitY = y;
+
+            return new Point(HitX, HitY);
         }
 
         GameSession HowChangeFrame()

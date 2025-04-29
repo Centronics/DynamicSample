@@ -159,7 +159,7 @@ namespace DynamicSample
 
     internal static class MouseClickMethods
     {
-        public static void ClickMouse(Point point)
+        public static void Click(Point point)
         {
             Input[] inputs =
             {
@@ -203,7 +203,7 @@ namespace DynamicSample
             };
 
             if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) != (uint)inputs.Length)
-                throw new Exception($@"{nameof(ClickMouse)} error = {Marshal.GetLastWin32Error()}");
+                throw new Exception($@"{nameof(Click)} error = {Marshal.GetLastWin32Error()}");
         }
     }
 }

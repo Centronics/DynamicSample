@@ -1,62 +1,102 @@
-﻿using SharpDX;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using System.Xml.Serialization;
 using DynamicParser;
+using SharpDX;
+using SharpDX.Direct3D11;
+using SharpDX.DXGI;
 using Device = SharpDX.Direct3D11.Device;
 using Format = SharpDX.DXGI.Format;
 using MapFlags = SharpDX.Direct3D11.MapFlags;
 using Resource = SharpDX.DXGI.Resource;
 using Processor = DynamicParser.Processor;
+using BitImages = DynamicSample.FrmGameBot.SettingsProfilesArray.HitSettings.BitImages;
 
 namespace DynamicSample
 {
     public partial class FrmGameBot : Form
     {
-        public sealed class GameSettings
+        [Serializable]
+        public sealed class SettingsProfilesArray
         {
-            public sealed class BitImages
+            [Serializable]
+            public sealed class HitSettings
             {
-                public Size FieldSize { get; set; }
-                public char Name { get; set; }
-                public Point Coords { get; set; }
-                public List<int> Data { get; set; }
-
-                Bitmap _intBmp;
-
-                public Bitmap GetBitmap()
+                [Serializable]
+                public sealed class BitImages
                 {
-                    if (!(_intBmp is null))
-                        return _intBmp;
+                    public Size FieldSize { get; set; }
 
-                    int mx = FieldSize.Width, my = FieldSize.Height;
-                    List<int> data = Data;
+                    public char Name { get; set; }
 
-                    Bitmap bmp = new Bitmap(mx, my);
+                    public Point Coords { get; set; }
 
-                    for (int y = 0; y < my; y++)
-                        for (int x = 0; x < mx; x++)
-                            bmp.SetPixel(x, y, Color.FromArgb(data[mx * y + x]));
+                    public List<int> Data { get; set; } = new List<int>();
 
-                    _intBmp = bmp;
+                    public int HitX => Coords.X + FieldSize.Width / 2;
 
-                    return bmp;
+                    public int HitY => Coords.Y + FieldSize.Height / 2;
+
+                    public Bitmap AsBitmap
+                    {
+                        get
+                        {
+                            int mx = FieldSize.Width, my = FieldSize.Height;
+                            List<int> data = Data;
+
+                            Bitmap bmp = new Bitmap(mx, my);
+
+                            for (int y = 0; y < my; y++)
+                                for (int x = 0; x < mx; x++)
+                                    bmp.SetPixel(x, y, Color.FromArgb(data[mx * y + x]));
+
+                            return bmp;
+                        }
+                    }
                 }
+
+                public List<BitImages> Spaces { get; set; } = new List<BitImages>();
+
+                public List<BitImages> EventClicks { get; set; } = new List<BitImages>();
+
+                public string ProfileName { get; set; } = string.Empty;
             }
 
-            public Rectangle MainWindowRect { get; set; }
+            public List<HitSettings> Profiles { get; set; } = new List<HitSettings>();
 
-            public Point? FirstClick { get; set; }
+            [XmlIgnore]
+            static string SettingsFilePath => $@"{Application.StartupPath}\{Application.ProductName}_{nameof(FrmGameBot)}Settings.xml";
 
-            public Point? LastClick { get; set; }
+            [XmlIgnore]
+            public static SettingsProfilesArray CurrentSettings
+            {
+                get
+                {
+                    try
+                    {
+                        XmlSerializer ser = new XmlSerializer(typeof(SettingsProfilesArray));
+                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Open))
+                            return (SettingsProfilesArray)ser.Deserialize(fs);
+                    }
+                    catch
+                    {
+                        return new SettingsProfilesArray();
+                    }
+                }
 
-            public List<BitImages> Spaces { get; set; } // работать с помощью DynamicParser
+                set
+                {
+                    XmlSerializer ser = new XmlSerializer(typeof(SettingsProfilesArray));
+                    using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Create))
+                        ser.Serialize(fs, value);
+                }
+            }
         }
 
         public FrmGameBot()
@@ -64,9 +104,9 @@ namespace DynamicSample
             InitializeComponent();
         }
 
-        Point? _firstClickBuf, _lastClickBuf;
+        readonly SettingsProfilesArray _currentSettings = SettingsProfilesArray.CurrentSettings;
 
-        public GameSettings CurrentSettings { get; } = new GameSettings();
+        SettingsProfilesArray.HitSettings _currentHitSettings = new SettingsProfilesArray.HitSettings();
 
         static Bitmap TakeScreenshot()
         {
@@ -135,13 +175,18 @@ namespace DynamicSample
 
         Bitmap CopyGameFieldFromScreen()
         {
+            return CopyGameFieldFromScreen(out Bitmap _);
+        }
+
+        Bitmap CopyGameFieldFromScreen(out Bitmap origin)
+        {
             Rectangle rect = GameFieldRect;
-            Bitmap from = TakeScreenshot();
+            origin = TakeScreenshot();
             Bitmap b = new Bitmap(rect.Width, rect.Height);
 
             for (int x = rect.X, xto = 0; x < rect.Right; x++, xto++)
                 for (int y = rect.Y, yto = 0; y < rect.Bottom; y++, yto++)
-                    b.SetPixel(xto, yto, from.GetPixel(x, y));
+                    b.SetPixel(xto, yto, origin.GetPixel(x, y));
 
             return b;
         }
@@ -151,6 +196,8 @@ namespace DynamicSample
             pbScreenField.BackColor = Color.Red;
             TransparencyKey = Color.Red; // по умолчанию ЧЕРНЫЙ
             AllowTransparency = true;
+
+            cbxProfiles.Items.AddRange(_currentSettings.Profiles.Select(s => (object)s.ProfileName).ToArray());
         }
 
         Rectangle GameFieldRect => new Rectangle(pbScreenField.PointToScreen(new Point()), pbScreenField.Size);
@@ -166,55 +213,40 @@ namespace DynamicSample
             return result;
         }
 
-        void PictureBox1_MouseClick(object sender, MouseEventArgs e)
-        {
-            if (radFirstClick.Checked)
-            {
-                _firstClickBuf = e.Location;
-                return;
-            }
-
-            if (radClickAfter.Checked)
-                _lastClickBuf = e.Location;
-        }
-
         void BtnSavePosition_Click(object sender, EventArgs e)
         {
-            if (radFirstClick.Checked)
+            Rectangle gfr = GameFieldRect;
+
+            Bitmap b;
+
+            if (radNeedClick.Checked)
             {
-                if (_firstClickBuf.HasValue)
+                BitImages bi = new BitImages
                 {
-                    CurrentSettings.FirstClick = _firstClickBuf;
-                    _firstClickBuf = null;
-                }
+                    Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
+                    Coords = gfr.Location,
+                    FieldSize = gfr.Size,
+                    Name = 'Z'
+                };
 
-                radClickAfter.Checked = true;
-                return;
-            }
-
-            if (radClickAfter.Checked)
-            {
-                if (_lastClickBuf.HasValue)
-                {
-                    CurrentSettings.LastClick = _lastClickBuf;
-                    _lastClickBuf = null;
-                }
-
+                _currentHitSettings.EventClicks.Add(bi);
                 radEmptySpace.Checked = true;
+
                 return;
             }
 
             if (radEmptySpace.Checked)
             {
-                GameSettings.BitImages bi = new GameSettings.BitImages
+                BitImages bi = new BitImages
                 {
-                    Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
-                    Coords = GameFieldRect.Location,
-                    FieldSize = GameFieldRect.Size,
+                    Data = GetBitmapAsInts(CopyGameFieldFromScreen(out b)),
+                    Coords = gfr.Location,
+                    FieldSize = gfr.Size,
                     Name = 'E'
                 };
 
-                CurrentSettings.Spaces.Add(bi);
+                _currentHitSettings.Spaces.Add(bi);
+                GetClick();
 
                 radField_X.Checked = true;
                 return;
@@ -222,50 +254,68 @@ namespace DynamicSample
 
             if (radField_X.Checked)
             {
-                GameSettings.BitImages bi = new GameSettings.BitImages
+                BitImages bi = new BitImages
                 {
-                    Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
-                    Coords = GameFieldRect.Location,
-                    FieldSize = GameFieldRect.Size,
+                    Data = GetBitmapAsInts(CopyGameFieldFromScreen(out b)),
+                    Coords = gfr.Location,
+                    FieldSize = gfr.Size,
                     Name = 'X'
                 };
 
-                CurrentSettings.Spaces.Add(bi);
+                _currentHitSettings.Spaces.Add(bi);
+                GetClick();
 
                 radField_O.Checked = true;
                 return;
             }
 
-            if (!radField_O.Checked)
-                return;
-
-            GameSettings.BitImages bi1 = new GameSettings.BitImages
+            if (radField_O.Checked)
             {
-                Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
-                Coords = GameFieldRect.Location,
-                FieldSize = GameFieldRect.Size,
-                Name = 'O'
-            };
+                BitImages bi = new BitImages
+                {
+                    Data = GetBitmapAsInts(CopyGameFieldFromScreen(out b)),
+                    Coords = gfr.Location,
+                    FieldSize = gfr.Size,
+                    Name = 'O'
+                };
 
-            CurrentSettings.Spaces.Add(bi1);
+                _currentHitSettings.Spaces.Add(bi);
+                GetClick();
+            }
+
+            return;
+
+            void GetClick()
+            {
+                List<BitImages> eventClicks =
+                    new List<BitImages>();
+
+                foreach (BitImages bi3 in _currentHitSettings.EventClicks)
+                {
+                    BitImages bi2 =
+                        new BitImages
+                        {
+                            Data = GetBitmapAsInts(GetBitmapPiece(new Rectangle(bi3.Coords, bi3.FieldSize), b)),
+                            Coords = bi3.Coords,
+                            FieldSize = bi3.FieldSize,
+                            Name = 'E'
+                        };
+
+                    eventClicks.Add(bi3);
+                    eventClicks.Add(bi2);
+                }
+
+                _currentHitSettings.EventClicks = eventClicks;
+            }
         }
 
         void BtnClearPosition_Click(object sender, EventArgs e)
         {
-            if (radFirstClick.Checked)
-            {
-                _firstClickBuf = null;
+            if (radNeedClick.Checked)
                 return;
-            }
-
-            if (radClickAfter.Checked)
-            {
-                _lastClickBuf = null;
-                return;
-            }
 
             if (radEmptySpace.Checked || radField_X.Checked || radField_O.Checked)
-                CurrentSettings.Spaces.Clear();
+                _currentHitSettings.Spaces.Clear();
         }
 
         static bool BitmapCompare(Bitmap btm1, Bitmap btm2)
@@ -286,31 +336,39 @@ namespace DynamicSample
             return true;
         }
 
-        Bitmap GetFrameNow()
+        Bitmap GetFullFrameNow()
         {
-            Bitmap lastFrame = null;
+            Bitmap lastFrame = null, lastFullFrame;
 
-            int timeout = 300;
-
-            SafeExecute(() =>
-            {
-                if (!int.TryParse(textBox1.Text, out timeout) || timeout < 0 || timeout > 10000)
-                    timeout = 300;
-            }, true);
+            int? timeout = null;
 
             while (!IsPlayingStopped())
             {
-                if (!IsFrameChanged())
-                    return lastFrame;
+                if (timeout.HasValue)
+                {
+                    Thread.Sleep(timeout.Value);
+                    continue;
+                }
 
-                Thread.Sleep(timeout);
+                if (!IsFrameChanged())
+                    return lastFullFrame;
+
+                if (timeout.HasValue)
+                    continue;
+
+                SafeExecute(() =>
+                {
+                    timeout = int.TryParse(textBox1.Text, out int t) && t > 0 && t < 10000
+                        ? t
+                        : 300;
+                }, true);
             }
 
             return null;
 
             bool IsFrameChanged()
             {
-                Bitmap now = CopyGameFieldFromScreen(); // сравнить с _lastFrame - на каждый кадр надо делать реакцию!
+                Bitmap now = CopyGameFieldFromScreen(out lastFullFrame);
 
                 if (lastFrame is null)
                 {
@@ -319,21 +377,12 @@ namespace DynamicSample
                 }
 
                 if (BitmapCompare(now, lastFrame))
-                    return
-                        true; // ДО начала игры все выбранные точки надо отображать; а хранить их надо в виде дистанции от краёв главной формы, а, перед игрой, проверять, не выходим ли мы (точки) за них
+                    return true;
 
                 lastFrame = now;
                 return false;
-
-                // НЕ надо держать игру только в одном экране - ФОРМА (во вреям игры) служит ТОЛЬКО для понимания того, чтобы остановить или проолжить игру - в зависимости от того, находится ли указатель внутри нее
-                // она НЕ должна мешать игре
             }
         }
-
-        //bool IsGameReStarted(Bitmap frame, out bool? iamX)
-        //{
-        // если заполненных клеточек было больше раньше
-        //}
 
         bool IsPlayingStopped()
         {
@@ -396,22 +445,6 @@ namespace DynamicSample
                 return GameSession.BotHit;
 
             throw new UnauthorizedAccessException();
-
-            //int? result = null;
-
-            //for (int y = 0; y < 3; y++)
-            //    for (int x = 0; x < 3; x++)
-            //    {
-            //        if (map[x, y] == GameSession.EmptyHit)
-            //            continue;
-
-            //        if (result.HasValue)
-            //            return null;
-
-            //        result = map[x, y];
-            //    }
-
-            //return result;
         }
 
         void GameThreadFunction()
@@ -419,11 +452,11 @@ namespace DynamicSample
             GameSession gameSession = new GameSession();
             int[,] sessionCopy = new int[3, 3];
             int amIxo = GameSession.EmptyHit;
-            bool fClicked = false;
 
             try
             {
-                ProcessorContainer req = new ProcessorContainer(CurrentSettings.Spaces.Select(bi => new Processor(bi.GetBitmap(), bi.Name.ToString())).ToArray());
+                (BitImages, ProcessorContainer)[] pcs = GetProcessorHandlers();
+                ProcessorContainer req = new ProcessorContainer(_currentHitSettings.Spaces.Select(bi => new Processor(bi.AsBitmap, bi.Name.ToString())).ToArray());
 
                 while (true)
                 {
@@ -432,25 +465,17 @@ namespace DynamicSample
                         if (IsPlayingStopped())
                             break;
 
-                        Bitmap b = GetFrameNow();
+                        Bitmap fullFrameNow = DoClickOperations(pcs);
 
-                        if (b is null || IsPlayingStopped())
+                        if (IsPlayingStopped() || fullFrameNow is null)
                             break;
 
-                        if (!fClicked && CurrentSettings.FirstClick.HasValue)
-                        {
-                            MouseClickMethods.ClickMouse(CurrentSettings.FirstClick.Value);
-                            fClicked = true;
-                        }
-
-                        IEnumerable<Processor> pq = CurrentSettings.Spaces.Select(bi => new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), b), @"Z"));
+                        IEnumerable<Processor> pq1 = _currentHitSettings.Spaces.Select(bi => new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z"));
 
                         if (IsPlayingStopped())
                             break;
 
-                        List<SearchResults> results = new List<SearchResults>(pq.Select(p => p.GetEqual(req)));
-
-                        // поля получил и запросы написал, теперь надо отследить изменения - НАДО сформировать поле и дисгностировать его на предмет статуса игры
+                        List<SearchResults> results = new List<SearchResults>(pq1.Select(p => p.GetEqual(req)));
 
                         if (IsPlayingStopped())
                             break;
@@ -474,15 +499,18 @@ namespace DynamicSample
                             switch (pp.Procs[0].Tag[0])
                             {
                                 case 'X':
-                                    sessionCopy[x, y] = GameSession.UserHit;
+                                    if (sessionCopy[x, y] == GameSession.EmptyHit)
+                                        sessionCopy[x, y] = GameSession.UserHit;
                                     break;
 
                                 case 'O':
-                                    sessionCopy[x, y] = GameSession.BotHit;
+                                    if (sessionCopy[x, y] == GameSession.EmptyHit)
+                                        sessionCopy[x, y] = GameSession.BotHit;
                                     break;
 
                                 case 'E':
-                                    sessionCopy[x, y] = GameSession.EmptyHit;
+                                    if (sessionCopy[x, y] != GameSession.EmptyHit)
+                                        throw new Exception($@"Непонятное значение в поле ({sessionCopy[x, y]}).");
                                     break;
 
                                 default:
@@ -505,7 +533,20 @@ namespace DynamicSample
                             throw new InvalidOperationException(@"Ударить не получилось.");
 
                         if (gameSession.CurrentWinner == GameSession.Winner.NOBODY)
-                            gameSession.MakeBotHit();
+                        {
+                            Point hit = gameSession.MakeBotHit();
+
+                            if (sessionCopy[hit.X, hit.Y] != GameSession.EmptyHit)
+                                throw new InvalidOperationException($@"Пытаюсь пойти не туда ({hit.X}, {hit.Y})");
+
+                            sessionCopy[hit.X, hit.Y] = amIxo;
+                            BitImages bi = _currentHitSettings.Spaces[hit.Y * 3 + hit.X];
+                            int px = bi.Coords.X + bi.FieldSize.Width / 2;
+                            int py = bi.Coords.Y + bi.FieldSize.Height / 2;
+
+                            MouseClickMethods.Click(new Point(px, py));
+                            GetFullFrameNow();
+                        }
 
                         if (IsPlayingStopped())
                             break;
@@ -513,55 +554,88 @@ namespace DynamicSample
                         switch (gameSession.CurrentWinner)
                         {
                             case GameSession.Winner.NOBODY:
-                                return;
+                                break;
                             case GameSession.Winner.STANDOFF:
-                                MessageBox.Show(@"Ничья!");
-                                return;
                             case GameSession.Winner.USER:
-
-                                MessageBox.Show(amIxo == GameSession.BotHit ? @"Я выиграл!" : @"Соперник выиграл!");
-
-                                GetFrameNow();
-
-                                if (CurrentSettings.LastClick.HasValue)
-                                    MouseClickMethods.ClickMouse(CurrentSettings.LastClick.Value);
-
-                                return;
                             case GameSession.Winner.BOT:
-
-                                MessageBox.Show(amIxo == GameSession.UserHit ? @"Я выиграл!" : @"Соперник выиграл!");
-
-                                GetFrameNow();
-
-                                if (CurrentSettings.LastClick.HasValue)
-                                    MouseClickMethods.ClickMouse(CurrentSettings.LastClick.Value);
-
-                                return;
+                                DoClickOperations(pcs);
+                                break;
                             default:
                                 throw new ArgumentOutOfRangeException();
                         }
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show(ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        //Application.Exit();
+                        SafeExecute(() => MessageBox.Show(ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error), true);
+                        break;
                     }
                 }
             }
             finally
             {
-                //INVOKE
-                radFirstClick.Enabled = true;
-                radClickAfter.Enabled = true;
-                radEmptySpace.Enabled = true;
-                radField_X.Enabled = true;
-                radField_O.Enabled = true;
-                btnClearPosition.Enabled = true;
-                btnSavePosition.Enabled = true;
+                SafeExecute(() =>
+                {
+                    radNeedClick.Enabled = true;
+                    radEmptySpace.Enabled = true;
+                    radField_X.Enabled = true;
+                    radField_O.Enabled = true;
+                    btnClearPosition.Enabled = true;
+                    btnSavePosition.Enabled = true;
+                }, true);
+            }
+
+            return;
+
+            Bitmap DoClickOperations((BitImages, ProcessorContainer)[] pcs)
+            {
+                Bitmap fullFrameNow = GetFullFrameNow();
+
+                if (IsPlayingStopped() || fullFrameNow is null)
+                    return null;
+
+                foreach ((BitImages bi, ProcessorContainer pc) in pcs)
+                {
+                    if (IsPlayingStopped())
+                        return null;
+
+                    Processor pq = new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z");
+                    SearchResults sr = pq.GetEqual(pc);
+
+                    if (sr[0, 0].Procs.All(p => p.Tag[0] != 'Z'))
+                        continue;
+
+                    MouseClickMethods.Click(new Point(bi.HitX, bi.HitY));
+                    fullFrameNow = GetFullFrameNow();
+                }
+
+                return fullFrameNow;
+            }
+
+            (BitImages, ProcessorContainer)[] GetProcessorHandlers()
+            {
+                List<(BitImages, ProcessorHandler)> result = new List<(BitImages, ProcessorHandler)>();
+                Dictionary<Rectangle, ProcessorHandler> phs = new Dictionary<Rectangle, ProcessorHandler>();
+
+                foreach (BitImages ec in _currentHitSettings.EventClicks)
+                {
+                    if (phs.TryGetValue(new Rectangle(ec.Coords, ec.FieldSize), out ProcessorHandler ph))
+                    {
+                        ph.Add(new Processor(ec.AsBitmap, ec.Name.ToString()));
+                        continue;
+                    }
+
+                    ProcessorHandler ph1 = new ProcessorHandler();
+                    ph1.Add(new Processor(ec.AsBitmap, ec.Name.ToString()));
+
+                    phs.Add(new Rectangle(ec.Coords, ec.FieldSize), ph1);
+                    result.Add((ec, ph1));
+                }
+
+                return result.Select(bp => (bp.Item1, new ProcessorContainer(bp.Item2.Processors.ToArray()))).ToArray();
             }
         }
 
-        bool _inGame;
+        volatile bool _inGame;
 
         void PbScreenField_MouseLeave(object sender, EventArgs e)
         {
@@ -575,40 +649,54 @@ namespace DynamicSample
 
         void BtnGameStart_Click(object sender, EventArgs e)
         {
-            CurrentSettings.MainWindowRect = GameFieldRect;
+            //_currentHitSettings.MainWindowRect = GameFieldRect;
 
-            if (!CurrentSettings.LastClick.HasValue)
+            if (!_currentHitSettings.EventClicks.Any())
             {
                 MessageBox.Show(@"Не указан последний клик!");
                 return;
             }
 
-            if (CurrentSettings.Spaces.All(m => m.Name != 'X'))
+            if (_currentHitSettings.Spaces.All(m => m.Name != 'X'))
             {
                 MessageBox.Show(@"Не указаны символы крестиков.");
                 return;
             }
 
-            if (CurrentSettings.Spaces.All(m => m.Name != 'O'))
+            if (_currentHitSettings.Spaces.All(m => m.Name != 'O'))
             {
                 MessageBox.Show(@"Не указаны символы ноликов.");
                 return;
             }
 
-            if (CurrentSettings.Spaces.All(m => m.Name != 'E'))
+            if (_currentHitSettings.Spaces.All(m => m.Name != 'E'))
             {
                 MessageBox.Show(@"Не все клетки обозначены.");
                 return;
             }
 
-            if (CurrentSettings.Spaces.Count != 9)
+            if (_currentHitSettings.Spaces.Count != 9)
             {
                 MessageBox.Show(@"Указанное количество символов не равно 9.");
                 return;
             }
 
-            radFirstClick.Enabled = false;
-            radClickAfter.Enabled = false;
+            string profileName = string.Empty;
+
+            using (FrmName fn = new FrmName())
+                if (fn.ShowDialog(this) == DialogResult.OK)
+                    profileName = fn.MyTxtName;
+
+            if (string.IsNullOrEmpty(profileName))
+                profileName = cbxProfiles.Items.Count.ToString();
+
+            _currentHitSettings.ProfileName = profileName;
+            _currentSettings.Profiles.Insert(0, _currentHitSettings);
+
+            cbxProfiles.Items.Insert(0, _currentHitSettings.ProfileName);
+            _currentHitSettings = new SettingsProfilesArray.HitSettings();
+
+            radNeedClick.Enabled = false;
             radEmptySpace.Enabled = false;
             radField_X.Enabled = false;
             radField_O.Enabled = false;
@@ -687,6 +775,19 @@ namespace DynamicSample
                 Thread.ResetAbort();
         }
 
+        void FrmGameBot_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            try
+            {
+                SettingsProfilesArray.CurrentSettings = _currentSettings;
+            }
+            catch (Exception ex)
+            {
+                if (MessageBox.Show(this, $@"Ошибка при сохранении настроек: {ex.Message}{Environment.NewLine}Всё равно выйти?", @"Ошибка", MessageBoxButtons.YesNo) == DialogResult.No)
+                    e.Cancel = true;
+            }
+        }
+
         /// <summary>
         ///     Отображает сообщение с указанным текстом, в другом потоке.
         /// </summary>
@@ -701,6 +802,21 @@ namespace DynamicSample
                 IsBackground = true,
                 Name = @"Message"
             }.Start();
+        }
+
+        void CbxProfiles_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            try
+            {
+                if (!_currentSettings.Profiles.Any())
+                    return;
+
+                _currentHitSettings = _currentSettings.Profiles[cbxProfiles.SelectedIndex];
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, @"Ошибка");
+            }
         }
     }
 }
