@@ -34,7 +34,6 @@
             this.radField_O = new System.Windows.Forms.RadioButton();
             this.btnSavePosition = new System.Windows.Forms.Button();
             this.radEmptySpace = new System.Windows.Forms.RadioButton();
-            this.btnClearPosition = new System.Windows.Forms.Button();
             this.radNeedClick = new System.Windows.Forms.RadioButton();
             this.btnGameStart = new System.Windows.Forms.Button();
             this.cbxProfiles = new System.Windows.Forms.ComboBox();
@@ -87,11 +86,11 @@
             this.btnSavePosition.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.btnSavePosition.Font = new System.Drawing.Font("Microsoft Sans Serif", 7.875F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
             this.btnSavePosition.ForeColor = System.Drawing.Color.Green;
-            this.btnSavePosition.Location = new System.Drawing.Point(163, 109);
+            this.btnSavePosition.Location = new System.Drawing.Point(101, 109);
             this.btnSavePosition.Name = "btnSavePosition";
-            this.btnSavePosition.Size = new System.Drawing.Size(84, 34);
+            this.btnSavePosition.Size = new System.Drawing.Size(146, 34);
             this.btnSavePosition.TabIndex = 3;
-            this.btnSavePosition.Text = "OK";
+            this.btnSavePosition.Text = "Записать";
             this.btnSavePosition.UseVisualStyleBackColor = true;
             this.btnSavePosition.Click += new System.EventHandler(this.BtnSavePosition_Click);
             // 
@@ -106,27 +105,16 @@
             this.radEmptySpace.Text = "Пуст место";
             this.radEmptySpace.UseVisualStyleBackColor = true;
             // 
-            // btnClearPosition
-            // 
-            this.btnClearPosition.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnClearPosition.Font = new System.Drawing.Font("Microsoft Sans Serif", 7.875F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
-            this.btnClearPosition.ForeColor = System.Drawing.Color.Red;
-            this.btnClearPosition.Location = new System.Drawing.Point(102, 109);
-            this.btnClearPosition.Name = "btnClearPosition";
-            this.btnClearPosition.Size = new System.Drawing.Size(55, 33);
-            this.btnClearPosition.TabIndex = 5;
-            this.btnClearPosition.Text = "X";
-            this.btnClearPosition.UseVisualStyleBackColor = true;
-            this.btnClearPosition.Click += new System.EventHandler(this.BtnClearPosition_Click);
-            // 
             // radNeedClick
             // 
             this.radNeedClick.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.radNeedClick.AutoSize = true;
+            this.radNeedClick.Checked = true;
             this.radNeedClick.Location = new System.Drawing.Point(101, 5);
             this.radNeedClick.Name = "radNeedClick";
             this.radNeedClick.Size = new System.Drawing.Size(136, 29);
             this.radNeedClick.TabIndex = 6;
+            this.radNeedClick.TabStop = true;
             this.radNeedClick.Text = "Кликнуть";
             this.radNeedClick.UseVisualStyleBackColor = true;
             // 
@@ -149,7 +137,7 @@
             this.cbxProfiles.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbxProfiles.FormattingEnabled = true;
             this.cbxProfiles.Items.AddRange(new object[] {
-            "<Авто>"});
+            "<Новый>"});
             this.cbxProfiles.Location = new System.Drawing.Point(12, 149);
             this.cbxProfiles.Name = "cbxProfiles";
             this.cbxProfiles.Size = new System.Drawing.Size(235, 33);
@@ -159,12 +147,12 @@
             // textBox1
             // 
             this.textBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.textBox1.Enabled = false;
             this.textBox1.Location = new System.Drawing.Point(133, 188);
             this.textBox1.Name = "textBox1";
             this.textBox1.Size = new System.Drawing.Size(84, 31);
             this.textBox1.TabIndex = 10;
             this.textBox1.Text = "300";
+            this.textBox1.TextChanged += new System.EventHandler(this.textBox1_TextChanged);
             // 
             // label1
             // 
@@ -198,7 +186,6 @@
             this.Controls.Add(this.cbxProfiles);
             this.Controls.Add(this.btnGameStart);
             this.Controls.Add(this.radNeedClick);
-            this.Controls.Add(this.btnClearPosition);
             this.Controls.Add(this.radEmptySpace);
             this.Controls.Add(this.btnSavePosition);
             this.Controls.Add(this.radField_O);
@@ -225,7 +212,6 @@
         private System.Windows.Forms.RadioButton radField_O;
         private System.Windows.Forms.Button btnSavePosition;
         private System.Windows.Forms.RadioButton radEmptySpace;
-        private System.Windows.Forms.Button btnClearPosition;
         private System.Windows.Forms.RadioButton radNeedClick;
         private System.Windows.Forms.Button btnGameStart;
         private System.Windows.Forms.ComboBox cbxProfiles;

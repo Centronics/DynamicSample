@@ -214,13 +214,14 @@ namespace DynamicSample
             return true;
         }
 
-        public Point MakeBotHit()
+        public void MakeBotHit()
         {
             GameSession p = HowChangeFrame() ?? throw new InvalidDataException();
+            MakeBotHit(p.HitX, p.HitY);
+        }
 
-            int x = p.HitX;
-            int y = p.HitY;
-
+        public void MakeBotHit(int x, int y)
+        {
             if (_gameField[x, y] != EmptyHit)
                 throw new Exception(
                     $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
@@ -229,8 +230,6 @@ namespace DynamicSample
 
             HitX = x;
             HitY = y;
-
-            return new Point(HitX, HitY);
         }
 
         GameSession HowChangeFrame()

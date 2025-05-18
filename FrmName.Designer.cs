@@ -38,6 +38,9 @@
             this.txtName.Name = "txtName";
             this.txtName.Size = new System.Drawing.Size(220, 31);
             this.txtName.TabIndex = 0;
+            this.txtName.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtName_KeyDown);
+            this.txtName.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.txtName_KeyPress);
+            this.txtName.KeyUp += new System.Windows.Forms.KeyEventHandler(this.txtName_KeyUp);
             // 
             // btnOK
             // 
@@ -60,6 +63,7 @@
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "FrmName";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "FrmName";
             this.ResumeLayout(false);
             this.PerformLayout();

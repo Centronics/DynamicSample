@@ -5,6 +5,8 @@ namespace DynamicSample
 {
     internal static class Program
     {
+        public static bool IsDebugLogEnabled { get; private set; }
+
         /// <summary>
         ///     Главная точка входа для приложения.
         /// </summary>
@@ -12,14 +14,13 @@ namespace DynamicSample
         static void Main(string[] args)
         {
             bool bot = false;
-            bool debuglog = false;
 
             int argsCount = args.Length;
 
             if (argsCount > 0 && argsCount < 3)
             {
                 bot = IsBot(args[0]) || (argsCount > 1 && IsBot(args[1]));
-                debuglog = IsDebugLog(args[0]) || (argsCount > 1 && IsDebugLog(args[1])); // обработать
+                IsDebugLogEnabled = IsDebugLog(args[0]) || (argsCount > 1 && IsDebugLog(args[1]));
             }
 
             Application.EnableVisualStyles();
@@ -36,7 +37,5 @@ namespace DynamicSample
 
             bool IsDebugLog(string s) => s == @"-debuglog";
         }
-
-
     }
 }

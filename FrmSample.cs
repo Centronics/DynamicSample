@@ -21,13 +21,12 @@ namespace DynamicSample
 
         void PbDraw_MouseClick(object sender, MouseEventArgs e)
         {
-            
-
-            //return;
-
             try
             {
-                if (!_gameSession.MakeUserHit(e.X / 161, e.Y / 161)) // НЕ делать фиксу, а делить на три
+                int pbDrawCw = pbDraw.Width / 3;
+                int pbDrawCh = pbDraw.Height / 3;
+
+                if (!_gameSession.MakeUserHit(e.X / pbDrawCw, e.Y / pbDrawCh))
                     return;
 
                 RefreshGameField();
@@ -97,19 +96,26 @@ namespace DynamicSample
 
             _gameGrFront.Clear(Color.LightGray);
 
-            _gameGrFront.DrawRectangle(BlackPen, 161, 0, 2, pbDraw.Height); // фикса! - делить на 3
-            _gameGrFront.DrawRectangle(BlackPen, 322, 0, 2, pbDraw.Height);
+            int pbDrawCw = pbDraw.Width / 3;
+            int pbDrawCh = pbDraw.Height / 3;
 
-            _gameGrFront.DrawRectangle(BlackPen, 0, 161, pbDraw.Width, 2);
-            _gameGrFront.DrawRectangle(BlackPen, 0, 322, pbDraw.Width, 2);
+            float szVal = (pbDrawCw + pbDrawCh) / 316.0f;
+            szVal -= szVal * 0.2f;
+            szVal *= 228.0f;
+
+            _gameGrFront.DrawRectangle(BlackPen, pbDrawCw, 0, 2, pbDraw.Height);
+            _gameGrFront.DrawRectangle(BlackPen, pbDrawCw * 2, 0, 2, pbDraw.Height);
+
+            _gameGrFront.DrawRectangle(BlackPen, 0, pbDrawCh, pbDraw.Width, 2);
+            _gameGrFront.DrawRectangle(BlackPen, 0, pbDrawCh * 2, pbDraw.Width, 2);
 
             for (int y = 0; y < 3; y++)
                 for (int x = 0; x < 3; x++)
                 {
                     if (_gameSession[x, y] == GameSession.UserHit)
-                        DrawX(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
+                        DrawX(x * pbDrawCw, y * pbDrawCh, _gameSession.HitX == x && _gameSession.HitY == y);
                     if (_gameSession[x, y] == GameSession.BotHit)
-                        DrawZero(x * 161, y * 161, _gameSession.HitX == x && _gameSession.HitY == y);
+                        DrawZero(x * pbDrawCw, y * pbDrawCh, _gameSession.HitX == x && _gameSession.HitY == y);
                 }
 
             pbDraw.Refresh();
@@ -119,14 +125,14 @@ namespace DynamicSample
             void DrawX(int x, int y, bool lastHit)
             {
                 _gameGrFront.DrawString(@"X",
-                    new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
+                    new Font(FontFamily.GenericMonospace, szVal, FontStyle.Italic, GraphicsUnit.Pixel),
                     new SolidBrush(lastHit ? Color.Green : Color.DodgerBlue), x - 36, y - 46);
             }
 
             void DrawZero(int x, int y, bool lastHit)
             {
                 _gameGrFront.DrawString(@"O",
-                    new Font(FontFamily.GenericMonospace, 224.0F, FontStyle.Italic, GraphicsUnit.Pixel),
+                    new Font(FontFamily.GenericMonospace, szVal, FontStyle.Italic, GraphicsUnit.Pixel),
                     new SolidBrush(lastHit ? Color.Green : Color.Red), x - 35, y - 43);
             }
         }
