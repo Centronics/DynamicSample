@@ -31,18 +31,23 @@ namespace DynamicSample
             }
         }
 
-        void txtName_KeyDown(object sender, KeyEventArgs e)
-        {
-            
-        }
-
-        private void txtName_KeyUp(object sender, KeyEventArgs e)
+        void txtName_KeyUp(object sender, KeyEventArgs e)
         {
             switch (e.KeyCode)
             {
                 case Keys.Enter:
                     DialogResult = DialogResult.OK;
                     return;
+                case Keys.Escape:
+                    DialogResult = DialogResult.Cancel;
+                    return;
+            }
+        }
+
+        void FrmName_KeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.KeyCode)
+            {
                 case Keys.Escape:
                     DialogResult = DialogResult.Cancel;
                     return;

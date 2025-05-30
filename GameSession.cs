@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
-using DynamicParser;
-using DynamicProcessor;
 
 namespace DynamicSample
 {
@@ -27,19 +24,23 @@ namespace DynamicSample
 
         public static readonly int EmptyHit = 0;
 
-        public static readonly int UserHit = int.MaxValue;
-
-        public static readonly int BotHit = int.MinValue;
-
         readonly int[,] _gameField;
 
         int _curX, _curY;
+
+        static int _userHit = int.MaxValue, _botHit = int.MinValue;
+
+        static bool _hitInverted;
 
         static GameSession _lastBotHit;
 
         static readonly HashSet<GameSession> SessionsStandoff = new HashSet<GameSession>();
 
         static readonly HashSet<GameSession> SessionsTotal = new HashSet<GameSession>();
+
+        public static int UserHit => _userHit;
+
+        public static int BotHit => _botHit;
 
         public GameSession()
         {
@@ -75,8 +76,14 @@ namespace DynamicSample
             if (!(obj is GameSession gs))
                 return false;
 
-            for (int y = 0, my = gs._gameField.GetLength(1); y < my; y++)
-                for (int x = 0, mx = gs._gameField.GetLength(0); x < mx; x++)
+            int mx = gs._gameField.GetLength(0);
+            int my = gs._gameField.GetLength(1);
+
+            if (_gameField.GetLength(0) != mx || _gameField.GetLength(1) != my)
+                return false;
+
+            for (int y = 0; y < my; y++)
+                for (int x = 0; x < mx; x++)
                     if (_gameField[x, y] != gs._gameField[x, y])
                         return false;
 
@@ -164,12 +171,24 @@ namespace DynamicSample
             }
         }
 
-        public bool MakeUserHit(int x, int y)
+        public bool MakeCompetitorHit(int x, int y)
+        {
+            return MakeHit(x, y, BotHit);
+        }
+
+        public void MakeTargetHit(int x, int y)
+        {
+            if (!MakeHit(x, y, UserHit))
+                throw new Exception(
+                    $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
+        }
+
+        bool MakeHit(int x, int y, int hit)
         {
             if (_gameField[x, y] != EmptyHit)
                 return false;
 
-            _gameField[x, y] = UserHit;
+            _gameField[x, y] = hit;
 
             HitX = x;
             HitY = y;
@@ -214,19 +233,17 @@ namespace DynamicSample
             return true;
         }
 
-        public void MakeBotHit()
+        public void MakeHitDecision()
         {
             GameSession p = HowChangeFrame() ?? throw new InvalidDataException();
-            MakeBotHit(p.HitX, p.HitY);
-        }
 
-        public void MakeBotHit(int x, int y)
-        {
+            int x = p.HitX, y = p.HitY;
+
             if (_gameField[x, y] != EmptyHit)
                 throw new Exception(
                     $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
 
-            _gameField[x, y] = BotHit;
+            _gameField[x, y] = UserHit;
 
             HitX = x;
             HitY = y;
@@ -274,7 +291,7 @@ namespace DynamicSample
 
             if (result.CurrentModel == InterModel.NULL || result.CurrentModel == InterModel.INVERT)
                 return result;
-            
+
             int[,] gf = GameFieldCopy(_gameField);
             gf[result.HitX, result.HitY] = BotHit;
 
@@ -424,6 +441,63 @@ namespace DynamicSample
                     result[x, y] = map[x, y];
 
             return result;
+        }
+
+        public static bool IsGameCompetitorsInverted
+        {
+            get => _userHit < 0 && _botHit > 0;
+
+            set
+            {
+                _hitInverted = IsGameCompetitorsInverted != value;
+
+                if (value)
+                {
+                    _userHit = int.MinValue;
+                    _botHit = int.MaxValue;
+                    return;
+                }
+
+                _userHit = int.MaxValue;
+                _botHit = int.MinValue;
+            }
+        }
+
+        public void ActualizeLastHitValue()
+        {
+            if (!_hitInverted)
+                return;
+
+            try
+            {
+                int x = HitX, y = HitY;
+
+                if (x < 0 || y < 0)
+                    return;
+
+                int hit = _gameField[x, y];
+
+                if (hit == EmptyHit)
+                    return;
+
+                switch (hit)
+                {
+                    case int.MaxValue:
+                        if (IsGameCompetitorsInverted)
+                            _gameField[x, y] = int.MinValue;
+                        break;
+                    case int.MinValue:
+                        if (IsGameCompetitorsInverted)
+                            _gameField[x, y] = int.MaxValue;
+                        break;
+                    default:
+                        throw new ApplicationException();
+                }
+            }
+            finally
+            {
+                _hitInverted = false;
+            }
         }
     }
 }

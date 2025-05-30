@@ -151,7 +151,7 @@
             this.textBox1.Name = "textBox1";
             this.textBox1.Size = new System.Drawing.Size(84, 31);
             this.textBox1.TabIndex = 10;
-            this.textBox1.Text = "300";
+            this.textBox1.Text = "700";
             this.textBox1.TextChanged += new System.EventHandler(this.textBox1_TextChanged);
             // 
             // label1
@@ -192,6 +192,7 @@
             this.Controls.Add(this.radField_X);
             this.Controls.Add(this.pbScreenField);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.KeyPreview = true;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.MinimumSize = new System.Drawing.Size(47, 92);
@@ -199,6 +200,7 @@
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FrmGameBot_FormClosing);
             this.Shown += new System.EventHandler(this.FrmGameSettings_Shown);
+            this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.FrmGameBot_KeyDown);
             ((System.ComponentModel.ISupportInitialize)(this.pbScreenField)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();

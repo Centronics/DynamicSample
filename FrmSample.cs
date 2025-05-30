@@ -26,14 +26,14 @@ namespace DynamicSample
                 int pbDrawCw = pbDraw.Width / 3;
                 int pbDrawCh = pbDraw.Height / 3;
 
-                if (!_gameSession.MakeUserHit(e.X / pbDrawCw, e.Y / pbDrawCh))
+                if (!_gameSession.MakeCompetitorHit(e.X / pbDrawCw, e.Y / pbDrawCh))
                     return;
 
                 RefreshGameField();
 
                 if (_gameSession.CurrentWinner == GameSession.Winner.NOBODY)
                 {
-                    _gameSession.MakeBotHit();
+                    _gameSession.MakeHitDecision();
                     RefreshGameField();
                 }
 

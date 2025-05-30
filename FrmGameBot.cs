@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using System.Xml.Serialization;
@@ -138,6 +137,8 @@ namespace DynamicSample
 
         bool _needSaveProfile;
 
+        int _firstHitX = -1, _firstHitY = -1;
+
         /// <summary>
         ///     Поток, выполняющий текущий поисковый запрос.
         /// </summary>
@@ -242,11 +243,6 @@ namespace DynamicSample
             }
         }
 
-        //Bitmap CopyGameFieldFromScreen()
-        //{
-        //    return CopyGameFieldFromScreen(out Bitmap _);
-        //}
-
         void SaveProfile()
         {
             for (int k = 0; k < _settingProfiles.Profiles.Count; k++)
@@ -265,6 +261,12 @@ namespace DynamicSample
             _needSaveProfile = false;
         }
 
+        void StartNewSession()
+        {
+            _firstHitX = -1;
+            _firstHitY = -1;
+        }
+
         Bitmap CopyGameFieldFromScreen(out Bitmap origin)
         {
             Rectangle rect = new Rectangle();
@@ -275,9 +277,6 @@ namespace DynamicSample
             for (int x = rect.X, xto = 0; x < rect.Right; x++, xto++)
                 for (int y = rect.Y, yto = 0; y < rect.Bottom; y++, yto++)
                     b.SetPixel(xto, yto, origin.GetPixel(x, y));
-
-            //origin.Save(@"C:\GIT\origin.bmp", ImageFormat.Bmp);
-            //b.Save(@"C:\GIT\b.bmp", ImageFormat.Bmp);
 
             return b;
         }
@@ -550,9 +549,7 @@ namespace DynamicSample
 
                 SafeExecute(() =>
                 {
-                    timeout = int.TryParse(textBox1.Text, out int t) && t > 0 && t < 10000
-                        ? t
-                        : 300;
+                    timeout = int.TryParse(textBox1.Text, out int t) && t > 0 && t < 10000 ? t : 700;
                 }, true);
             }
 
@@ -599,36 +596,65 @@ namespace DynamicSample
             return result;
         }
 
-        static Point? GetUserHitPoint(int[,] map1, GameSession map2, out bool isEmpty)
+        (Point? userHitPoint, bool isEmpty) GetUserHitPoint(int[,] map1, GameSession map2)
         {
-            Point? result = null;
+            int iAmxo = GameSession.EmptyHit;
+
+            if (_firstHitX < 0 && _firstHitY < 0 && map2.HitX > -1 && map2.HitY > -1)
+            {
+                iAmxo = map1[map2.HitX, map2.HitY];
+
+                if (iAmxo != GameSession.BotHit && iAmxo != GameSession.UserHit)
+                    throw new ApplicationException();
+
+                _firstHitX = map2.HitX;
+                _firstHitY = map2.HitY;
+            }
+            else if (_firstHitX > -1 && _firstHitY > -1)
+            {
+                iAmxo = map1[_firstHitX, _firstHitY];
+
+                if (iAmxo != GameSession.BotHit && iAmxo != GameSession.UserHit)
+                    throw new ApplicationException();
+            }
+
+            if (iAmxo != GameSession.EmptyHit && iAmxo != map1[_firstHitX, _firstHitY])
+                throw new ApplicationException();
+
             bool mapIsEmpty = true;
+            Point result = new Point();
+            int diffCount = 0;
 
             for (int y = 0; y < 3; y++)
                 for (int x = 0; x < 3; x++)
                 {
                     int m1 = map1[x, y];
+                    int m2 = map2[x, y];
 
                     if (m1 != GameSession.EmptyHit)
                         mapIsEmpty = false;
 
-                    if (m1 == map2[x, y])
+                    if (m1 == m2)
                         continue;
 
-                    if (result.HasValue)
+                    if (m1 == GameSession.EmptyHit)
+                        throw new InvalidOperationException();
+
+                    if (m1 != GameSession.EmptyHit && m2 != GameSession.EmptyHit)
                         throw new InvalidOperationException();
 
                     result = new Point(x, y);
+                    ++diffCount;
                 }
 
-            if (mapIsEmpty || !result.HasValue)
-            {
-                isEmpty = true;
-                return null;
-            }
+            if (diffCount < 1)
+                return (null, mapIsEmpty);
 
-            int v1 = map1[result.Value.X, result.Value.Y];
-            int v2 = map2[result.Value.X, result.Value.Y];
+            if (diffCount > 1)
+                throw new UnauthorizedAccessException();
+
+            int v1 = map1[result.X, result.Y];
+            int v2 = map2[result.X, result.Y];
 
             if (v1 == GameSession.EmptyHit)
                 throw new InvalidOperationException();
@@ -636,8 +662,7 @@ namespace DynamicSample
             if (v2 != GameSession.EmptyHit)
                 throw new InvalidOperationException();
 
-            isEmpty = false;
-            return result;
+            return (result, mapIsEmpty);
         }
 
         ProcessorContainer ProcessorContainerFromSettings => new ProcessorContainer(_selectedProfileSettings.Spaces.Select((bi, bx) => new Processor(bi.AsBitmap, $@"{bi.Name}{bx}")).ToArray());
@@ -707,11 +732,27 @@ namespace DynamicSample
 
             WaitWhilePlayingPaused();
 
-            MouseClickMethods.Click(new Point(px, py));
+            MouseClickMethods.Click(GetPhysicalCoords(px, py));
+        }
+
+        static Point GetPhysicalCoords(int x, int y)
+        {
+            Screen screen = Screen.FromPoint(new Point(x, y));
+
+            int cX = screen.Bounds.Width;
+            int cY = screen.Bounds.Height;
+
+            int pX = GetAbsoluteCoordinate(x, cX);
+            int pY = GetAbsoluteCoordinate(y, cY);
+
+            return new Point(screen.Bounds.Left + pX, screen.Bounds.Top + pY);
+
+            int GetAbsoluteCoordinate(int pixelCoordinate, int screenResolution) => pixelCoordinate * 65536 / screenResolution + 1;
         }
 
         void GameThreadFunction()
         {
+            StartNewSession();
             GameSession gameSession = new GameSession();
 
             try
@@ -731,33 +772,37 @@ namespace DynamicSample
                         if (sessionCopy is null)
                             break;
 
-                        Point? userHit = GetUserHitPoint(sessionCopy, gameSession, out bool isEmpty);
+                        (Point? userHitPoint, bool isEmpty) = GetUserHitPoint(sessionCopy, gameSession);
 
                         if (isEmpty)
                         {
                             int myHit = hc.Counter;
                             hc.Inc();
-                            Point p = new Point(myHit % 3, myHit / 3);
-                            gameSession.MakeBotHit(p.X, p.Y);
 
-                            Thread.Sleep(2000);
+                            gameSession.MakeTargetHit(myHit % 3, myHit / 3);
                             DoPhysicalHit(gameSession.HitX, gameSession.HitY);
-                            Thread.Sleep(2000);
+
+                            int[,] bf = BuildField(req);
+
+                            if (bf is null)
+                                break;
+
+                            GameSession.IsGameCompetitorsInverted = bf[gameSession.HitX, gameSession.HitY] == int.MaxValue;
+                            gameSession.ActualizeLastHitValue();
 
                             continue;
                         }
 
-                        if (!userHit.HasValue)
+                        if (!userHitPoint.HasValue)
                             continue;
 
-                        if (!gameSession.MakeUserHit(userHit.Value.X, userHit.Value.Y))
-                            throw new InvalidOperationException(@"Ударить не получилось.");
+                        if (!gameSession.MakeCompetitorHit(userHitPoint.Value.X, userHitPoint.Value.Y))
+                            throw new Exception($@"Что-то пошло не так ({userHitPoint.Value.X}, {userHitPoint.Value.Y}).");
 
                         if (gameSession.CurrentWinner == GameSession.Winner.NOBODY)
                         {
-                            gameSession.MakeBotHit();
+                            gameSession.MakeHitDecision();
                             DoPhysicalHit(gameSession.HitX, gameSession.HitY);
-                            Thread.Sleep(2000);
                         }
 
                         switch (gameSession.CurrentWinner)
@@ -880,38 +925,6 @@ namespace DynamicSample
 
                 if (!UpdateProfileStatus(false))
                     return;
-
-                //_selectedProfileSettings.MainWindowRect = GameFieldRect;
-
-                //if (!_selectedProfileSettings.EventClicks.Any())
-                //{
-                //    MessageBox.Show(@"Не указан последний клик!");
-                //    return;
-                //}
-
-                //if (_selectedProfileSettings.Spaces.All(m => m.Name != 'X'))
-                //{
-                //    MessageBox.Show(@"Не указаны символы крестиков.");
-                //    return;
-                //}
-
-                //if (_selectedProfileSettings.Spaces.All(m => m.Name != 'O'))
-                //{
-                //    MessageBox.Show(@"Не указаны символы ноликов.");
-                //    return;
-                //}
-
-                //if (_selectedProfileSettings.Spaces.All(m => m.Name != 'E'))
-                //{
-                //    MessageBox.Show(@"Не все клетки обозначены.");
-                //    return;
-                //}
-
-                //if (_selectedProfileSettings.Spaces.Count != 9)
-                //{
-                //    MessageBox.Show($@"Указанное количество символов не равно 9 ({_selectedProfileSettings.Spaces.Count}).");
-                //    return;
-                //}
 
                 if (_needSaveProfile)
                 {
@@ -1065,6 +1078,16 @@ namespace DynamicSample
             catch (Exception ex)
             {
                 MessageBox.Show(this, ex.Message, @"Ошибка");
+            }
+        }
+
+        void FrmGameBot_KeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.KeyCode)
+            {
+                case Keys.Escape:
+                    Application.Exit();
+                    return;
             }
         }
 
