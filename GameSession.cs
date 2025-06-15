@@ -51,6 +51,14 @@ namespace DynamicSample
                     _gameField[x, y] = EmptyHit;
         }
 
+        public GameSession(int[,] map)
+        {
+            if (map == null)
+                throw new ArgumentNullException(nameof(map));
+
+            _gameField = GameFieldCopy(map);
+        }
+
         GameSession(int[,] map, InterModel model)
         {
             if (map == null)
@@ -171,17 +179,33 @@ namespace DynamicSample
             }
         }
 
-        public bool MakeCompetitorHit(int x, int y)
+        public static void FixGameStep()
         {
-            return MakeHit(x, y, BotHit);
+            if (_lastBotHit is null)
+                return;
+
+            switch (_lastBotHit.CurrentModel)
+            {
+                case InterModel.STANDOFF:
+                    SessionsStandoff.Add(_lastBotHit);
+                    break;
+                case InterModel.TOTAL:
+                    SessionsTotal.Add(_lastBotHit);
+                    SessionsStandoff.Add(_lastBotHit);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
+            _lastBotHit = null;
         }
 
-        public void MakeTargetHit(int x, int y)
+        public bool MakeCompetitorHit(int x, int y)
         {
-            if (!MakeHit(x, y, UserHit))
-                throw new Exception(
-                    $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
+            return MakeHit(x, y, BotHit /*UserHit*/); // BotHit - для БОТ-режима!
         }
+
+        public bool MakeTargetHit(int x, int y) => MakeHit(x, y, UserHit);
 
         bool MakeHit(int x, int y, int hit)
         {
@@ -243,7 +267,7 @@ namespace DynamicSample
                 throw new Exception(
                     $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
 
-            _gameField[x, y] = UserHit;
+            _gameField[x, y] = UserHit; // BotHit; // UserHit; - это для БОТ-режима!
 
             HitX = x;
             HitY = y;
@@ -434,11 +458,39 @@ namespace DynamicSample
 
             int sX = map.GetLength(0), sY = map.GetLength(1);
 
+            if (sX != 3)
+                throw new ArgumentException();
+
+            if (sY != 3)
+                throw new ArgumentException();
+
             int[,] result = new int[sX, sY];
 
             for (int y = 0; y < sY; y++)
                 for (int x = 0; x < sX; x++)
                     result[x, y] = map[x, y];
+
+            return result;
+        }
+
+        public static (int x, int y)? GetAloneHit(int[,] map)
+        {
+            if (map is null)
+                return null;
+
+            (int x, int y)? result = null;
+
+            for (int y = 0; y < map.GetLength(1); y++)
+                for (int x = 0; x < map.GetLength(0); x++)
+                {
+                    if (map[x, y] == EmptyHit)
+                        continue;
+
+                    if (!result.HasValue)
+                        result = (x, y);
+                    else
+                        return null;
+                }
 
             return result;
         }

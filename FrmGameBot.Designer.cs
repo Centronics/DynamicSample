@@ -48,14 +48,12 @@
             this.pbScreenField.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.pbScreenField.BackColor = System.Drawing.SystemColors.ActiveCaptionText;
+            this.pbScreenField.BackColor = System.Drawing.SystemColors.Window;
             this.pbScreenField.Location = new System.Drawing.Point(12, 5);
             this.pbScreenField.Name = "pbScreenField";
             this.pbScreenField.Size = new System.Drawing.Size(84, 98);
             this.pbScreenField.TabIndex = 0;
             this.pbScreenField.TabStop = false;
-            this.pbScreenField.MouseEnter += new System.EventHandler(this.PbScreenField_MouseEnter);
-            this.pbScreenField.MouseLeave += new System.EventHandler(this.PbScreenField_MouseLeave);
             // 
             // radField_X
             // 
@@ -122,7 +120,7 @@
             // 
             this.btnGameStart.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.btnGameStart.Enabled = false;
-            this.btnGameStart.ForeColor = System.Drawing.Color.Blue;
+            this.btnGameStart.ForeColor = System.Drawing.Color.MediumBlue;
             this.btnGameStart.Location = new System.Drawing.Point(12, 109);
             this.btnGameStart.Name = "btnGameStart";
             this.btnGameStart.Size = new System.Drawing.Size(84, 34);
@@ -151,8 +149,8 @@
             this.textBox1.Name = "textBox1";
             this.textBox1.Size = new System.Drawing.Size(84, 31);
             this.textBox1.TabIndex = 10;
-            this.textBox1.Text = "700";
-            this.textBox1.TextChanged += new System.EventHandler(this.textBox1_TextChanged);
+            this.textBox1.Text = "50";
+            this.textBox1.TextChanged += new System.EventHandler(this.TextBox1_TextChanged);
             // 
             // label1
             // 
@@ -192,15 +190,15 @@
             this.Controls.Add(this.radField_X);
             this.Controls.Add(this.pbScreenField);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.KeyPreview = true;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.MinimumSize = new System.Drawing.Size(47, 92);
             this.Name = "FrmGameBot";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            this.Activated += new System.EventHandler(this.FrmGameBot_Activated);
+            this.Deactivate += new System.EventHandler(this.FrmGameBot_Deactivate);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FrmGameBot_FormClosing);
             this.Shown += new System.EventHandler(this.FrmGameSettings_Shown);
-            this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.FrmGameBot_KeyDown);
             ((System.ComponentModel.ISupportInitialize)(this.pbScreenField)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 using static DynamicSample.NativeMethods;
 
 namespace DynamicSample
@@ -704,6 +705,9 @@ namespace DynamicSample
 
         [DllImport("user32.dll")]
         public static extern int GetSystemMetrics(SystemMetric smIndex);
+
+        [DllImport("user32.dll")]
+        public static extern short GetAsyncKeyState(Keys vKey);
     }
 
     internal static class MouseClickMethods
