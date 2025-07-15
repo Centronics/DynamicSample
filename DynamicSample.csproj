@@ -93,7 +93,7 @@
     <Compile Include="GameSession.cs" />
     <Compile Include="HashCreator.cs" />
     <Compile Include="ProcessorHandler.cs" />
-    <Compile Include="Program.cs" />
+    <Compile Include="Launcher.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SendInput.cs" />
     <EmbeddedResource Include="FrmGameBot.resx">

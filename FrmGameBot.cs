@@ -1,6 +1,9 @@
-﻿using System;
+﻿using DynamicParser;
+using SharpDX;
+using SharpDX.Direct3D11;
+using SharpDX.DXGI;
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -8,17 +11,13 @@ using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
 using System.Xml.Serialization;
-using DynamicParser;
-using SharpDX;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
+using BitImages = DynamicSample.FrmGameBot.SettingsProfilesArray.HitSettings.BitImages;
 using Device = SharpDX.Direct3D11.Device;
 using Format = SharpDX.DXGI.Format;
-using MapFlags = SharpDX.Direct3D11.MapFlags;
-using Resource = SharpDX.DXGI.Resource;
-using Processor = DynamicParser.Processor;
-using BitImages = DynamicSample.FrmGameBot.SettingsProfilesArray.HitSettings.BitImages;
 using HitCounter = DynamicSample.FrmGameBot.SettingsProfilesArray.HitSettings.HitCounter;
+using MapFlags = SharpDX.Direct3D11.MapFlags;
+using Processor = DynamicParser.Processor;
+using Resource = SharpDX.DXGI.Resource;
 using ThreadState = System.Threading.ThreadState;
 
 namespace DynamicSample
@@ -53,6 +52,22 @@ namespace DynamicSample
                 [Serializable]
                 public sealed class BitImages
                 {
+                    public BitImages()
+                    {
+                        // Empty (for serialization)
+                    }
+
+                    public BitImages(BitImages bi)
+                    {
+                        if (bi is null)
+                            return;
+
+                        FieldSize = bi.FieldSize;
+                        Name = bi.Name;
+                        Coords = bi.Coords;
+                        Data = new List<int>(bi.Data);
+                    }
+
                     public Size FieldSize { get; set; }
 
                     public char Name { get; set; }
@@ -64,6 +79,10 @@ namespace DynamicSample
                     public int HitX => Coords.X + FieldSize.Width / 2;
 
                     public int HitY => Coords.Y + FieldSize.Height / 2;
+
+                    public Processor AsProcessor => new Processor(AsBitmap, Name.ToString());
+
+                    public Rectangle AsRectangle => new Rectangle(Coords, FieldSize);
 
                     public Bitmap AsBitmap
                     {
@@ -239,60 +258,70 @@ namespace DynamicSample
 
         static Bitmap TakeScreenshot()
         {
-            Factory1 factory = new Factory1();
-            Adapter1 adapter = factory.GetAdapter1(0);
-            Device device = new Device(adapter);
-            Output output = adapter.GetOutput(0);
-            Output1 output1 = output.QueryInterface<Output1>();
-
-            int width = output.Description.DesktopBounds.Right;
-            int height = output.Description.DesktopBounds.Bottom;
-
-            Texture2DDescription textureDesc = new Texture2DDescription
+            try
             {
-                CpuAccessFlags = CpuAccessFlags.Read,
-                BindFlags = BindFlags.None,
-                Format = Format.B8G8R8A8_UNorm,
-                Width = width,
-                Height = height,
-                OptionFlags = ResourceOptionFlags.None,
-                MipLevels = 1,
-                ArraySize = 1,
-                SampleDescription = { Count = 1, Quality = 0 },
-                Usage = ResourceUsage.Staging
-            };
+                Factory1 factory = new Factory1();
+                Adapter1 adapter = factory.GetAdapter1(0);
+                Device device = new Device(adapter);
+                Output output = adapter.GetOutput(0);
+                Output1 output1 = output.QueryInterface<Output1>();
 
-            using (Texture2D screenTexture = new Texture2D(device, textureDesc))
-            {
-                using (OutputDuplication duplicatedOutput = output1.DuplicateOutput(device))
+                int width = output.Description.DesktopBounds.Right;
+                int height = output.Description.DesktopBounds.Bottom;
+
+                Texture2DDescription textureDesc = new Texture2DDescription
                 {
-                    Thread.Sleep(20); // захватчику экрана надо время проинициализироваться
-                    Bitmap bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-                    Resource screenResource = null;
-                    try
+                    CpuAccessFlags = CpuAccessFlags.Read,
+                    BindFlags = BindFlags.None,
+                    Format = Format.B8G8R8A8_UNorm,
+                    Width = width,
+                    Height = height,
+                    OptionFlags = ResourceOptionFlags.None,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    SampleDescription = { Count = 1, Quality = 0 },
+                    Usage = ResourceUsage.Staging
+                };
+
+                using (Texture2D screenTexture = new Texture2D(device, textureDesc))
+                {
+                    using (OutputDuplication duplicatedOutput = output1.DuplicateOutput(device))
                     {
-                        if (duplicatedOutput.TryAcquireNextFrame(10, out OutputDuplicateFrameInformation _, out screenResource) != Result.Ok)
-                            return bmp;
+                        Thread.Sleep(100); // захватчику экрана надо время проинициализироваться
+                        Bitmap bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                        Resource screenResource = null;
+                        try
+                        {
+                            if (duplicatedOutput.TryAcquireNextFrame(10, out OutputDuplicateFrameInformation _,
+                                    out screenResource) != Result.Ok)
+                                return bmp;
 
-                        using (Texture2D screenTexture2D = screenResource.QueryInterface<Texture2D>())
-                            device.ImmediateContext.CopyResource(screenTexture2D, screenTexture);
+                            using (Texture2D screenTexture2D = screenResource.QueryInterface<Texture2D>())
+                                device.ImmediateContext.CopyResource(screenTexture2D, screenTexture);
 
-                        DataBox mapSource = device.ImmediateContext.MapSubresource(screenTexture, 0, MapMode.Read, MapFlags.None);
-                        BitmapData bmpData = bmp.LockBits(new Rectangle(Point.Empty, bmp.Size), ImageLockMode.WriteOnly, bmp.PixelFormat);
-                        IntPtr sourcePtr = mapSource.DataPointer;
-                        IntPtr destPtr = bmpData.Scan0;
-                        Utilities.CopyMemory(destPtr, sourcePtr, mapSource.RowPitch * height);
-                        bmp.UnlockBits(bmpData);
-                        device.ImmediateContext.UnmapSubresource(screenTexture, 0);
-                        duplicatedOutput.ReleaseFrame();
+                            DataBox mapSource =
+                                device.ImmediateContext.MapSubresource(screenTexture, 0, MapMode.Read, MapFlags.None);
+                            BitmapData bmpData = bmp.LockBits(new Rectangle(Point.Empty, bmp.Size),
+                                ImageLockMode.WriteOnly, bmp.PixelFormat);
+                            IntPtr sourcePtr = mapSource.DataPointer;
+                            IntPtr destPtr = bmpData.Scan0;
+                            Utilities.CopyMemory(destPtr, sourcePtr, mapSource.RowPitch * height);
+                            bmp.UnlockBits(bmpData);
+                            device.ImmediateContext.UnmapSubresource(screenTexture, 0);
+                            duplicatedOutput.ReleaseFrame();
+                        }
+                        finally
+                        {
+                            screenResource?.Dispose();
+                        }
+
+                        return bmp;
                     }
-                    finally
-                    {
-                        screenResource?.Dispose();
-                    }
-
-                    return bmp;
                 }
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -362,14 +391,19 @@ namespace DynamicSample
             _firstHitX = -1;
             _firstHitY = -1;
             _iAmXo = GameSession.EmptyHit;
+            GameSession.IsGameCompetitorsInverted = false;
         }
 
-        Bitmap CopyGameFieldFromScreen(out Bitmap origin)
+        Bitmap CopyGameFieldFromScreen()
         {
             Rectangle rect = new Rectangle();
             SafeExecute(() => rect = GameFieldRect, true);
-            origin = TakeScreenshot();
             Bitmap b = new Bitmap(rect.Width, rect.Height);
+
+            Bitmap origin = TakeScreenshot();
+
+            if (origin is null)
+                return b;
 
             for (int x = rect.X, xto = 0; x < rect.Right; x++, xto++)
                 for (int y = rect.Y, yto = 0; y < rect.Bottom; y++, yto++)
@@ -496,38 +530,37 @@ namespace DynamicSample
 
         void BtnSavePosition_Click(object sender, EventArgs e)
         {
-            Bitmap b;
+            Rectangle gfr = GameFieldRect;
+
+            if (radNeedClick.Checked)
+            {
+                BitImages bi = new BitImages
+                {
+                    Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
+                    Coords = gfr.Location,
+                    FieldSize = gfr.Size,
+                    Name = 'Z'
+                };
+
+                _selectedProfileSettings.EventClicks.Add(bi);
+                _needSaveProfile = true;
+                return;
+            }
 
             try
             {
-                Rectangle gfr = GameFieldRect;
-
-                if (radNeedClick.Checked)
-                {
-                    BitImages bi = new BitImages
-                    {
-                        Data = GetBitmapAsInts(CopyGameFieldFromScreen(out b)),
-                        Coords = gfr.Location,
-                        FieldSize = gfr.Size,
-                        Name = 'Z'
-                    };
-
-                    UpdateClicks(bi);
-                    return;
-                }
-
                 if (radEmptySpace.Checked)
                 {
                     BitImages bi = new BitImages
                     {
-                        Data = GetBitmapAsInts(CopyGameFieldFromScreen(out b)),
+                        Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
                         Coords = gfr.Location,
                         FieldSize = gfr.Size,
                         Name = 'E'
                     };
 
                     _selectedProfileSettings.Spaces.Add(bi);
-                    UpdateClicks();
+                    _needSaveProfile = true;
                     return;
                 }
 
@@ -535,159 +568,36 @@ namespace DynamicSample
                 {
                     BitImages bi = new BitImages
                     {
-                        Data = GetBitmapAsInts(CopyGameFieldFromScreen(out b)),
+                        Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
                         Coords = gfr.Location,
                         FieldSize = gfr.Size,
                         Name = 'X'
                     };
 
                     _selectedProfileSettings.Spaces.Add(bi);
-                    UpdateClicks();
+                    _needSaveProfile = true;
                     return;
                 }
 
-                if (radField_O.Checked)
-                {
-                    BitImages bi = new BitImages
-                    {
-                        Data = GetBitmapAsInts(CopyGameFieldFromScreen(out b)),
-                        Coords = gfr.Location,
-                        FieldSize = gfr.Size,
-                        Name = 'O'
-                    };
+                if (!radField_O.Checked)
+                    return;
 
-                    _selectedProfileSettings.Spaces.Add(bi);
-                    UpdateClicks();
-                }
+                BitImages bi1 = new BitImages
+                {
+                    Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
+                    Coords = gfr.Location,
+                    FieldSize = gfr.Size,
+                    Name = 'O'
+                };
+
+                _selectedProfileSettings.Spaces.Add(bi1);
+                _needSaveProfile = true;
             }
             finally
             {
                 UpdateProfileStatus(true);
             }
-
-            return;
-
-            void UpdateClicks(BitImages biAdd = null)
-            {
-                _needSaveProfile = true;
-
-                List<BitImages> eventClicks = new List<BitImages>();
-                ProcessorHandler ph = new ProcessorHandler();
-
-                if (!(biAdd is null))
-                {
-                    Processor prAdd = new Processor(biAdd.AsBitmap, biAdd.Name.ToString());
-
-                    int tc = ph.Processors.Count();
-
-                    ph.Add(prAdd);
-
-                    if (tc > ph.Processors.Count())
-                        eventClicks.Add(biAdd);
-
-                    return;
-                }
-
-                int tagsCount = ph.Processors.Count();
-
-                foreach (BitImages biClicks in _selectedProfileSettings.EventClicks)
-                {
-                    Bitmap bt = GetBitmapPiece(new Rectangle(biClicks.Coords, biClicks.FieldSize), b);
-                    const char pTag = 'E';
-
-                    ph.Add(new Processor(bt, pTag.ToString()));
-
-                    int tc = ph.Processors.Count();
-
-                    if (tc <= tagsCount)
-                        continue;
-
-                    tagsCount = tc;
-
-                    eventClicks.Add(new BitImages
-                    {
-                        Data = GetBitmapAsInts(bt),
-                        Coords = biClicks.Coords,
-                        FieldSize = biClicks.FieldSize,
-                        Name = pTag
-                    });
-                }
-
-                _selectedProfileSettings.EventClicks = eventClicks;
-            }
         }
-
-        static bool BitmapCompare(Bitmap btm1, Bitmap btm2)
-        {
-            if (btm1 is null || btm2 is null)
-                return true;
-
-            if (btm1.Width != btm2.Width)
-                return false;
-            if (btm1.Height != btm2.Height)
-                return false;
-
-            for (int y = 0; y < btm1.Height; y++)
-                for (int x = 0; x < btm1.Width; x++)
-                    if (btm1.GetPixel(x, y) != btm2.GetPixel(x, y))
-                        return false;
-
-            return true;
-        }
-
-        Bitmap GetFullFrameNow()
-        {
-            Bitmap lastFrame = null, lastFullFrame;
-
-            int? timeout = null;
-
-            while (true)
-            {
-                if (timeout.HasValue)
-                    Thread.Sleep(timeout.Value);
-
-                if (!IsFrameChanged())
-                    return lastFullFrame;
-
-                if (timeout.HasValue)
-                    continue;
-
-                SafeExecute(() =>
-                {
-                    timeout = int.TryParse(textBox1.Text, out int t) && t > 0 && t < 10000 ? t : 700;
-                }, true);
-            }
-
-            bool IsFrameChanged()
-            {
-                Bitmap now = CopyGameFieldFromScreen(out lastFullFrame);
-
-                if (lastFrame is null)
-                {
-                    lastFrame = now;
-                    return true;
-                }
-
-                if (BitmapCompare(now, lastFrame))
-                    return false;
-
-                lastFrame = now;
-                return true;
-            }
-        }
-
-        //bool WaitWhilePlayingPaused()
-        //{
-        //    bool wait = false;
-
-        //    while (!InGame)
-        //    {
-        //        wait = true;
-        //        Thread.Sleep(1000);
-        //    }
-
-        //    return wait;
-        //}
 
         static Bitmap GetBitmapPiece(Rectangle rect, Bitmap where)
         {
@@ -700,7 +610,7 @@ namespace DynamicSample
             return result;
         }
 
-        (Point? userHitPoint, bool isEmpty) GetUserHitPoint(int[,] map1, ref GameSession map2)
+        (Point? competitorHitPoint, bool isEmpty) GetCompetitorHitPoint(ref int[,] map1, ref GameSession map2)
         {
             if (_firstHitX < 0 || _firstHitY < 0)
             {
@@ -733,10 +643,7 @@ namespace DynamicSample
             {
                 int iAmxo = map1[_firstHitX, _firstHitY];
 
-                if (iAmxo != GameSession.BotHit && iAmxo != GameSession.UserHit)
-                    return (null, false);
-
-                if (iAmxo != _iAmXo)
+                if (iAmxo != GameSession.BotHit && iAmxo != GameSession.UserHit || iAmxo != _iAmXo)
                     return (null, false);
             }
 
@@ -756,10 +663,9 @@ namespace DynamicSample
                     if (m1 == m2)
                         continue;
 
-                    if (m1 == GameSession.EmptyHit)
-                        return (null, false);
-
-                    if (m1 != GameSession.EmptyHit && m2 != GameSession.EmptyHit)
+                    if (m1 == GameSession.EmptyHit || m2 != GameSession.EmptyHit ||
+                        (_iAmXo == GameSession.UserHit && m1 != GameSession.BotHit) ||
+                        (_iAmXo == GameSession.BotHit && m1 != GameSession.UserHit))
                         return (null, false);
 
                     result = new Point(x, y);
@@ -767,7 +673,10 @@ namespace DynamicSample
                 }
 
             if (diffCount < 1)
+            {
+                map1 = null;
                 return (null, mapIsEmpty);
+            }
 
             if (diffCount > 1)
                 return (null, false);
@@ -777,68 +686,82 @@ namespace DynamicSample
 
         ProcessorContainer ProcessorContainerFromSettings => new ProcessorContainer(_selectedProfileSettings.Spaces.Select((bi, bx) => new Processor(bi.AsBitmap, $@"{bi.Name}{bx}")).ToArray());
 
-        int[,] BuildField(ProcessorContainer req = null)
+        int[,] BuildField(IDictionary<Size, (BitImages, ProcessorHandler)> ps = null, ProcessorContainer req = null)
         {
-            Bitmap fullFrameNow = GetFullFrameNow();
+            Bitmap fullFrameNow = null;
+
+            if (!(ps is null) && DoClickOperations(ps, out fullFrameNow))
+            {
+                Thread.Sleep(1000);
+                fullFrameNow = TakeScreenshot();
+            }
+            else if (fullFrameNow is null)
+                fullFrameNow = TakeScreenshot();
 
             if (fullFrameNow is null)
                 return null;
 
-            IEnumerable<Processor> pq1 = _selectedProfileSettings.Spaces.Select(bi => new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z"));
-
-            if (req is null)
-                req = ProcessorContainerFromSettings;
-
-            List<SearchResults> results = new List<SearchResults>(pq1.Select(p => p.GetEqual(req)));
-
-            if (results.Count != 9)
-                throw new InvalidOperationException($@"{nameof(results)} не равно 9: {results.Count}");
-
-            int[,] sessionCopy = new int[3, 3];
-
-            for (int k = 0; k < 9; k++)
+            while (true)
             {
-                ProcPerc pp = results[k][0, 0];
+                Bitmap now = fullFrameNow;
+                IEnumerable<Processor> pq1 = _selectedProfileSettings.Spaces.Select(bi =>
+                    new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), now), @"Z"));
 
-                Processor[] pps = pp.Procs;
-                char rTag = pps[0].Tag[0];
+                if (req is null)
+                    req = ProcessorContainerFromSettings;
 
-                for (int kp = 1; kp < pps.Length; kp++)
+                List<SearchResults> results = new List<SearchResults>(pq1.Select(p => p.GetEqual(req)));
+
+                if (results.Count != 9)
+                    throw new InvalidOperationException($@"{nameof(results)} не равно 9: {results.Count}");
+
+                int[,] sessionCopy = new int[3, 3];
+
+                for (int k = 0; k < 9; k++)
                 {
-                    if (rTag != 'E')
+                    ProcPerc pp = results[k][0, 0];
+
+                    Processor[] pps = pp.Procs;
+                    char rTag = pps[0].Tag[0];
+
+                    for (int kp = 1; kp < pps.Length; kp++)
                     {
-                        char c = pps[kp].Tag[0];
-                        if (rTag != c && c != 'E')
-                            throw new ArgumentException($@"Неоднозначность ({pps.Length}) => ({pps[0].Tag} <==> {pps[kp].Tag}), клетка номер {k} (с нуля).");
-                        continue;
+                        if (rTag != 'E')
+                        {
+                            char c = pps[kp].Tag[0];
+                            if (rTag != c && c != 'E')
+                                throw new ArgumentException(
+                                    $@"Неоднозначность ({pps.Length}) => ({pps[0].Tag} <==> {pps[kp].Tag}), клетка номер {k} (с нуля).");
+                            continue;
+                        }
+
+                        rTag = pps[kp].Tag[0];
                     }
 
-                    rTag = pps[kp].Tag[0];
+                    int x = k % 3;
+                    int y = k / 3;
+
+                    switch (rTag)
+                    {
+                        case 'X':
+                            sessionCopy[x, y] = GameSession.IsGameCompetitorsInverted ? GameSession.BotHit : GameSession.UserHit;
+                            break;
+
+                        case 'O':
+                            sessionCopy[x, y] = GameSession.IsGameCompetitorsInverted ? GameSession.UserHit : GameSession.BotHit;
+                            break;
+
+                        case 'E':
+                            sessionCopy[x, y] = GameSession.EmptyHit;
+                            break;
+
+                        default:
+                            throw new Exception();
+                    }
                 }
 
-                int x = k % 3;
-                int y = k / 3;
-
-                switch (rTag)
-                {
-                    case 'X':
-                        sessionCopy[x, y] = GameSession.UserHit;
-                        break;
-
-                    case 'O':
-                        sessionCopy[x, y] = GameSession.BotHit;
-                        break;
-
-                    case 'E':
-                        sessionCopy[x, y] = GameSession.EmptyHit;
-                        break;
-
-                    default:
-                        throw new Exception();
-                }
+                return sessionCopy;
             }
-
-            return sessionCopy;
         }
 
         void DoPhysicalHit(int x, int y)
@@ -869,31 +792,30 @@ namespace DynamicSample
         {
             StartNewSession();
             GameSession gameSession = new GameSession();
+            int gameAttempts = 0;
 
-            (BitImages, ProcessorContainer)[] pcs = GetProcessorHandlers();
+            Dictionary<Size, (BitImages, ProcessorHandler)> pcs = EventClickHandlers;
             ProcessorContainer req = ProcessorContainerFromSettings;
             HitCounter hc = _selectedProfileSettings.StartHitCounter;
-            Stopwatch timer = new Stopwatch();
 
             while (true)
             {
                 try
                 {
-                    int[,] sessionCopy = BuildField(req);
+                    int[,] sessionCopy = BuildField(pcs, req);
 
                     if (sessionCopy is null)
                         break;
 
-                    if (DoClickOperations(pcs))
-                    {
-                        GameSession.FixGameStep();
-                        continue;
-                    }
-
-                    (Point? userHitPoint, bool isEmpty) = GetUserHitPoint(sessionCopy, ref gameSession);
+                    (Point? competitorHitPoint, bool isEmpty) = GetCompetitorHitPoint(ref sessionCopy, ref gameSession);
 
                     if (isEmpty)
                     {
+                        GameSession.FixGameStep();
+                        StartNewSession();
+                        gameSession = new GameSession();
+                        gameAttempts = 0;
+
                         int myHit, myHitStart = hc.Counter;
                         bool hOk = false;
 
@@ -918,80 +840,88 @@ namespace DynamicSample
 
                         DoPhysicalHit(gameSession.HitX, gameSession.HitY);
 
-                        int[,] bf = BuildField(req);
+                        Thread.Sleep(1000);
+
+                        int[,] bf = BuildField(pcs, req);
 
                         if (bf is null)
                             break;
 
-                        GameSession.IsGameCompetitorsInverted = bf[gameSession.HitX, gameSession.HitY] == int.MaxValue;
-                        gameSession.ActualizeLastHitValue();
+                        int ht = bf[gameSession.HitX, gameSession.HitY];
 
-                        switch (gameSession.CurrentWinner)
+                        if (ht != GameSession.EmptyHit)
                         {
-                            case GameSession.Winner.NOBODY:
-                                break;
-                            case GameSession.Winner.STANDOFF:
-                            case GameSession.Winner.USER:
-                            case GameSession.Winner.BOT:
-                                DoClickOperations(pcs);
-                                StartNewSession();
-                                gameSession = new GameSession();
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            GameSession.IsGameCompetitorsInverted = ht == GameSession.UserHit;
+                            _iAmXo = GameSession.IsGameCompetitorsInverted
+                                ? GameSession.UserHit
+                                : GameSession.BotHit;
+
+                            gameSession.CorrectLastHit();
                         }
 
                         continue;
                     }
 
-                    if (!userHitPoint.HasValue)
+                    if (!competitorHitPoint.HasValue)
                     {
-                        switch (timer.IsRunning)
+                        if (sessionCopy is null)
                         {
-                            case true when timer.Elapsed.Seconds > 10:
-                                timer.Stop();
-                                DoClickOperations(pcs);
-                                StartNewSession();
-                                gameSession = new GameSession();
-                                break;
-                            case false:
-                                timer.Restart();
-                                break;
+                            Thread.Sleep(50);
+                            continue;
                         }
 
+                        if (gameAttempts < 2)
+                        {
+                            ++gameAttempts;
+                            Thread.Sleep(1000);
+                            continue;
+                        }
+
+                        GameSession.FixGameStep();
+                        StartNewSession();
+                        gameSession = new GameSession();
+                        gameAttempts = 0;
                         continue;
                     }
 
-                    timer.Stop();
+                    gameAttempts = 0;
 
-                    if (!gameSession.MakeCompetitorHit(userHitPoint.Value.X, userHitPoint.Value.Y))
-                        throw new Exception($@"Что-то пошло не так ({userHitPoint.Value.X}, {userHitPoint.Value.Y}).");
-
-                    if (gameSession.CurrentWinner == GameSession.Winner.NOBODY)
-                    {
-                        gameSession.MakeHitDecision();
-                        DoPhysicalHit(gameSession.HitX, gameSession.HitY);
-
-                        if (_iAmXo == GameSession.EmptyHit)
-                        {
-                            int[,] bf = BuildField(req);
-
-                            if (bf is null)
-                                break;
-
-                            GameSession.IsGameCompetitorsInverted = bf[gameSession.HitX, gameSession.HitY] == int.MaxValue;
-                            gameSession.ActualizeLastHitValue();
-                        }
-                    }
+                    if (!gameSession.MakeCompetitorHit(competitorHitPoint.Value.X, competitorHitPoint.Value.Y))
+                        throw new Exception($@"Что-то пошло не так ({competitorHitPoint.Value.X}, {competitorHitPoint.Value.Y}).");
 
                     switch (gameSession.CurrentWinner)
                     {
                         case GameSession.Winner.NOBODY:
+                            gameSession.MakeHitDecision();
+                            DoPhysicalHit(gameSession.HitX, gameSession.HitY);
+
+                            if (_iAmXo == GameSession.EmptyHit)
+                            {
+                                Thread.Sleep(1000);
+
+                                int[,] bf = BuildField(pcs, req);
+
+                                if (bf is null)
+                                    break;
+
+                                int ht = bf[gameSession.HitX, gameSession.HitY];
+
+                                if (ht != GameSession.EmptyHit)
+                                {
+                                    GameSession.IsGameCompetitorsInverted = ht == GameSession.UserHit;
+                                    _iAmXo = GameSession.IsGameCompetitorsInverted
+                                        ? GameSession.UserHit
+                                        : GameSession.BotHit;
+
+                                    gameSession.CorrectLastHit();
+                                }
+                            }
+
                             break;
                         case GameSession.Winner.STANDOFF:
                         case GameSession.Winner.USER:
                         case GameSession.Winner.BOT:
-                            DoClickOperations(pcs);
+                            GameSession.FixGameStep();
                             StartNewSession();
                             gameSession = new GameSession();
                             break;
@@ -1001,7 +931,7 @@ namespace DynamicSample
                 }
                 catch (ThreadAbortException)
                 {
-                    // ignored
+                    return;
                 }
                 catch (Exception ex)
                 {
@@ -1009,56 +939,51 @@ namespace DynamicSample
                     break;
                 }
             }
+        }
 
-            return;
+        bool DoClickOperations(IDictionary<Size, (BitImages, ProcessorHandler)> ps, out Bitmap fullFrameNow)
+        {
+            fullFrameNow = TakeScreenshot();
 
-            bool DoClickOperations((BitImages, ProcessorContainer)[] ps)
+            if (fullFrameNow is null)
+                return false;
+
+            foreach (BitImages bi in _selectedProfileSettings.EventClicks)
             {
-                Bitmap fullFrameNow = GetFullFrameNow();
+                Processor pq = new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z");
+                SearchResults sr = pq.GetEqual(new ProcessorContainer(ps[bi.FieldSize].Item2.Processors.ToArray()));
 
-                if (fullFrameNow is null)
-                    return false;
+                if (sr[0, 0].Procs.All(p => p.Tag[0] != 'Z'))
+                    continue;
 
-                bool result = false;
+                MouseClickMethods.Click(GetPhysicalCoords(bi.HitX, bi.HitY));
 
-                foreach ((BitImages bi, ProcessorContainer pc) in ps)
-                {
-                    Processor pq = new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z");
-                    SearchResults sr = pq.GetEqual(pc);
-
-                    if (sr[0, 0].Procs.All(p => p.Tag[0] != 'Z'))
-                        continue;
-
-                    result = true;
-                    MouseClickMethods.Click(new Point(bi.HitX, bi.HitY));
-                    Thread.Sleep(1000);
-                    fullFrameNow = GetFullFrameNow();
-                }
-
-                return result;
+                return true;
             }
 
-            (BitImages, ProcessorContainer)[] GetProcessorHandlers()
+            return false;
+        }
+
+        Dictionary<Size, (BitImages, ProcessorHandler)> EventClickHandlers
+        {
+            get
             {
-                List<(BitImages, ProcessorHandler)> result = new List<(BitImages, ProcessorHandler)>();
-                Dictionary<Rectangle, ProcessorHandler> phs = new Dictionary<Rectangle, ProcessorHandler>();
+                Dictionary<Size, (BitImages, ProcessorHandler)> phs = new Dictionary<Size, (BitImages, ProcessorHandler)>();
 
                 foreach (BitImages ec in _selectedProfileSettings.EventClicks)
                 {
-                    if (phs.TryGetValue(new Rectangle(ec.Coords, ec.FieldSize), out ProcessorHandler ph))
+                    if (phs.TryGetValue(ec.FieldSize, out (BitImages, ProcessorHandler) phh))
                     {
-                        ph.Add(new Processor(ec.AsBitmap, ec.Name.ToString()));
+                        phh.Item2.Add(ec.AsProcessor);
                         continue;
                     }
 
-                    ProcessorHandler ph1 = new ProcessorHandler();
-                    ph1.Add(new Processor(ec.AsBitmap, ec.Name.ToString()));
-
-                    phs.Add(new Rectangle(ec.Coords, ec.FieldSize), ph1);
-                    result.Add((ec, ph1));
+                    ProcessorHandler ph = new ProcessorHandler();
+                    ph.Add(ec.AsProcessor);
+                    phs.Add(ec.FieldSize, (ec, ph));
                 }
 
-                return result.Select(bp => (bp.Item1, new ProcessorContainer(bp.Item2.Processors.ToArray()))).ToArray();
+                return phs;
             }
         }
 
@@ -1115,6 +1040,18 @@ namespace DynamicSample
                         profileName = cbxProfiles.Items.Count.ToString();
 
                     _selectedProfileSettings.ProfileName = profileName;
+                    Bitmap screenshot = TakeScreenshot();
+
+                    if (!(screenshot is null))
+                    {
+                        _selectedProfileSettings.EventClicks.AddRange(
+                            _selectedProfileSettings.EventClicks.Select(ec =>
+                                (ec, GetBitmapPiece(ec.AsRectangle, screenshot))).Select(bt => new BitImages(bt.ec)
+                                {
+                                    Data = GetBitmapAsInts(bt.Item2),
+                                    Name = 'E'
+                                }).ToArray());
+                    }
 
                     SaveProfile();
                 }
@@ -1128,7 +1065,8 @@ namespace DynamicSample
 
                 Thread t = new Thread(GameThreadFunction)
                 {
-                    IsBackground = true
+                    IsBackground = true,
+                    Name = @"GameThread"
                 };
 
                 t.Start();
@@ -1271,8 +1209,6 @@ namespace DynamicSample
                 MessageBox.Show(this, ex.Message, @"Ошибка");
             }
         }
-
-        void TextBox1_TextChanged(object sender, EventArgs e) => _needSaveProfile = true;
 
         void FrmGameBot_Activated(object sender, EventArgs e) => IsActived = true;
 

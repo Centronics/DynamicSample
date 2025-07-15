@@ -22,15 +22,11 @@ namespace DynamicSample
             TOTAL
         }
 
-        public static readonly int EmptyHit = 0;
+        public const int EmptyHit = 0;
 
         readonly int[,] _gameField;
 
         int _curX, _curY;
-
-        static int _userHit = int.MaxValue, _botHit = int.MinValue;
-
-        static bool _hitInverted;
 
         static GameSession _lastBotHit;
 
@@ -38,9 +34,9 @@ namespace DynamicSample
 
         static readonly HashSet<GameSession> SessionsTotal = new HashSet<GameSession>();
 
-        public static int UserHit => _userHit;
+        public const int UserHit = int.MaxValue;
 
-        public static int BotHit => _botHit;
+        public const int BotHit = int.MinValue;
 
         public GameSession()
         {
@@ -75,6 +71,13 @@ namespace DynamicSample
         public InterModel CurrentModel { get; }
 
         public int this[int x, int y] => _gameField[x, y];
+
+        public void CorrectLastHit()
+        {
+            if (HitX >= 0 && HitX < _gameField.GetLength(0) &&
+                HitY >= 0 && HitY < _gameField.GetLength(1))
+                _gameField[HitX, HitY] = IsGameCompetitorsInverted ? BotHit : UserHit;
+        }
 
         public override bool Equals(object obj)
         {
@@ -124,15 +127,15 @@ namespace DynamicSample
         {
             get
             {
-                bool bb = IsLine(BotHit);
+                bool bh = IsLine(BotHit);
 
                 switch (IsLine(UserHit))
                 {
-                    case true when bb:
+                    case true when bh:
                         return Winner.STANDOFF;
                     case true:
                         return Winner.USER;
-                    case false when bb:
+                    case false when bh:
                         return Winner.BOT;
                 }
 
@@ -179,30 +182,58 @@ namespace DynamicSample
             }
         }
 
+        public void Invert()
+        {
+            if (IsGameCompetitorsInverted)
+                return;
+
+            for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
+                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
+                {
+                    switch (_gameField[x, y])
+                    {
+                        case UserHit:
+                            _gameField[x, y] = BotHit;
+                            continue;
+                        case BotHit:
+                            _gameField[x, y] = UserHit;
+                            break;
+                    }
+                }
+        }
+
         public static void FixGameStep()
         {
             if (_lastBotHit is null)
                 return;
 
+            _lastBotHit.Invert();
+
+            if (_lastBotHit.HowChangeFrame(InterModel.INVERT) != 0)
+            {
+                _lastBotHit = null;
+                return;
+            }
+
             switch (_lastBotHit.CurrentModel)
             {
                 case InterModel.STANDOFF:
-                    SessionsStandoff.Add(_lastBotHit);
                     break;
                 case InterModel.TOTAL:
                     SessionsTotal.Add(_lastBotHit);
-                    SessionsStandoff.Add(_lastBotHit);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+
+            SessionsStandoff.Add(_lastBotHit);
 
             _lastBotHit = null;
         }
 
         public bool MakeCompetitorHit(int x, int y)
         {
-            return MakeHit(x, y, BotHit /*UserHit*/); // BotHit - для БОТ-режима!
+            return MakeHit(x, y, IsGameCompetitorsInverted ? UserHit : BotHit);
         }
 
         public bool MakeTargetHit(int x, int y) => MakeHit(x, y, UserHit);
@@ -218,6 +249,17 @@ namespace DynamicSample
             HitY = y;
 
             Winner cw = CurrentWinner;
+
+            if (IsGameCompetitorsInverted)
+                switch (cw)
+                {
+                    case Winner.BOT:
+                        cw = Winner.USER;
+                        break;
+                    case Winner.USER:
+                        cw = Winner.BOT;
+                        break;
+                }
 
             switch (cw)
             {
@@ -267,10 +309,36 @@ namespace DynamicSample
                 throw new Exception(
                     $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
 
-            _gameField[x, y] = UserHit; // BotHit; // UserHit; - это для БОТ-режима!
+            _gameField[x, y] = IsGameCompetitorsInverted ? BotHit : UserHit;
 
             HitX = x;
             HitY = y;
+        }
+
+        public int HowChangeFrame(InterModel interModel)
+        {
+            int resultLength = int.MaxValue;
+
+            while (true)
+            {
+                int ctxLength = 0;
+                (GameSession frame, bool end) = NextFrame(true, null, ref ctxLength, interModel);
+
+                if (end)
+                    break;
+
+                if (frame is null)
+                    continue;
+
+                if (ctxLength >= resultLength)
+                    continue;
+
+                resultLength = ctxLength;
+            }
+
+            _curY = _curX = 0;
+
+            return resultLength;
         }
 
         GameSession HowChangeFrame()
@@ -495,61 +563,6 @@ namespace DynamicSample
             return result;
         }
 
-        public static bool IsGameCompetitorsInverted
-        {
-            get => _userHit < 0 && _botHit > 0;
-
-            set
-            {
-                _hitInverted = IsGameCompetitorsInverted != value;
-
-                if (value)
-                {
-                    _userHit = int.MinValue;
-                    _botHit = int.MaxValue;
-                    return;
-                }
-
-                _userHit = int.MaxValue;
-                _botHit = int.MinValue;
-            }
-        }
-
-        public void ActualizeLastHitValue()
-        {
-            if (!_hitInverted)
-                return;
-
-            try
-            {
-                int x = HitX, y = HitY;
-
-                if (x < 0 || y < 0)
-                    return;
-
-                int hit = _gameField[x, y];
-
-                if (hit == EmptyHit)
-                    return;
-
-                switch (hit)
-                {
-                    case int.MaxValue:
-                        if (IsGameCompetitorsInverted)
-                            _gameField[x, y] = int.MinValue;
-                        break;
-                    case int.MinValue:
-                        if (IsGameCompetitorsInverted)
-                            _gameField[x, y] = int.MaxValue;
-                        break;
-                    default:
-                        throw new ApplicationException();
-                }
-            }
-            finally
-            {
-                _hitInverted = false;
-            }
-        }
+        public static bool IsGameCompetitorsInverted { get; set; }
     }
 }

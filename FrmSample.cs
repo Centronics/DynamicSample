@@ -115,7 +115,7 @@ namespace DynamicSample
                     if (_gameSession[x, y] == GameSession.UserHit)
                         DrawX(x * pbDrawCw, y * pbDrawCh, _gameSession.HitX == x && _gameSession.HitY == y);
                     if (_gameSession[x, y] == GameSession.BotHit)
-                        DrawZero(x * pbDrawCw, y * pbDrawCh, _gameSession.HitX == x && _gameSession.HitY == y);
+                        DrawO(x * pbDrawCw, y * pbDrawCh, _gameSession.HitX == x && _gameSession.HitY == y);
                 }
 
             pbDraw.Refresh();
@@ -124,13 +124,25 @@ namespace DynamicSample
 
             void DrawX(int x, int y, bool lastHit)
             {
+                if (Launcher.InvertModeEnabled)
+                {
+                    DrawO(x, y, lastHit);
+                    return;
+                }
+
                 _gameGrFront.DrawString(@"X",
                     new Font(FontFamily.GenericMonospace, szVal, FontStyle.Italic, GraphicsUnit.Pixel),
                     new SolidBrush(lastHit ? Color.Green : Color.DodgerBlue), x - 36, y - 46);
             }
 
-            void DrawZero(int x, int y, bool lastHit)
+            void DrawO(int x, int y, bool lastHit)
             {
+                if (Launcher.InvertModeEnabled)
+                {
+                    DrawX(x, y, lastHit);
+                    return;
+                }
+
                 _gameGrFront.DrawString(@"O",
                     new Font(FontFamily.GenericMonospace, szVal, FontStyle.Italic, GraphicsUnit.Pixel),
                     new SolidBrush(lastHit ? Color.Green : Color.Red), x - 35, y - 43);

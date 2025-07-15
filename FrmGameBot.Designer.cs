@@ -37,9 +37,6 @@
             this.radNeedClick = new System.Windows.Forms.RadioButton();
             this.btnGameStart = new System.Windows.Forms.Button();
             this.cbxProfiles = new System.Windows.Forms.ComboBox();
-            this.textBox1 = new System.Windows.Forms.TextBox();
-            this.label1 = new System.Windows.Forms.Label();
-            this.label2 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.pbScreenField)).BeginInit();
             this.SuspendLayout();
             // 
@@ -49,7 +46,7 @@
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.pbScreenField.BackColor = System.Drawing.SystemColors.Window;
-            this.pbScreenField.Location = new System.Drawing.Point(12, 5);
+            this.pbScreenField.Location = new System.Drawing.Point(13, 6);
             this.pbScreenField.Name = "pbScreenField";
             this.pbScreenField.Size = new System.Drawing.Size(84, 98);
             this.pbScreenField.TabIndex = 0;
@@ -60,7 +57,7 @@
             this.radField_X.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.radField_X.AutoSize = true;
             this.radField_X.Font = new System.Drawing.Font("Microsoft Sans Serif", 7.875F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
-            this.radField_X.Location = new System.Drawing.Point(101, 73);
+            this.radField_X.Location = new System.Drawing.Point(102, 74);
             this.radField_X.Name = "radField_X";
             this.radField_X.Size = new System.Drawing.Size(58, 29);
             this.radField_X.TabIndex = 1;
@@ -72,7 +69,7 @@
             this.radField_O.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.radField_O.AutoSize = true;
             this.radField_O.Font = new System.Drawing.Font("Microsoft Sans Serif", 7.875F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
-            this.radField_O.Location = new System.Drawing.Point(160, 73);
+            this.radField_O.Location = new System.Drawing.Point(161, 74);
             this.radField_O.Name = "radField_O";
             this.radField_O.Size = new System.Drawing.Size(60, 29);
             this.radField_O.TabIndex = 2;
@@ -84,7 +81,7 @@
             this.btnSavePosition.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.btnSavePosition.Font = new System.Drawing.Font("Microsoft Sans Serif", 7.875F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
             this.btnSavePosition.ForeColor = System.Drawing.Color.Green;
-            this.btnSavePosition.Location = new System.Drawing.Point(101, 109);
+            this.btnSavePosition.Location = new System.Drawing.Point(102, 110);
             this.btnSavePosition.Name = "btnSavePosition";
             this.btnSavePosition.Size = new System.Drawing.Size(146, 34);
             this.btnSavePosition.TabIndex = 3;
@@ -96,7 +93,7 @@
             // 
             this.radEmptySpace.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.radEmptySpace.AutoSize = true;
-            this.radEmptySpace.Location = new System.Drawing.Point(101, 38);
+            this.radEmptySpace.Location = new System.Drawing.Point(102, 39);
             this.radEmptySpace.Name = "radEmptySpace";
             this.radEmptySpace.Size = new System.Drawing.Size(156, 29);
             this.radEmptySpace.TabIndex = 4;
@@ -108,7 +105,7 @@
             this.radNeedClick.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.radNeedClick.AutoSize = true;
             this.radNeedClick.Checked = true;
-            this.radNeedClick.Location = new System.Drawing.Point(101, 5);
+            this.radNeedClick.Location = new System.Drawing.Point(102, 6);
             this.radNeedClick.Name = "radNeedClick";
             this.radNeedClick.Size = new System.Drawing.Size(136, 29);
             this.radNeedClick.TabIndex = 6;
@@ -121,7 +118,7 @@
             this.btnGameStart.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.btnGameStart.Enabled = false;
             this.btnGameStart.ForeColor = System.Drawing.Color.MediumBlue;
-            this.btnGameStart.Location = new System.Drawing.Point(12, 109);
+            this.btnGameStart.Location = new System.Drawing.Point(13, 110);
             this.btnGameStart.Name = "btnGameStart";
             this.btnGameStart.Size = new System.Drawing.Size(84, 34);
             this.btnGameStart.TabIndex = 8;
@@ -136,51 +133,18 @@
             this.cbxProfiles.FormattingEnabled = true;
             this.cbxProfiles.Items.AddRange(new object[] {
             "<Новый>"});
-            this.cbxProfiles.Location = new System.Drawing.Point(12, 149);
+            this.cbxProfiles.Location = new System.Drawing.Point(13, 150);
             this.cbxProfiles.Name = "cbxProfiles";
             this.cbxProfiles.Size = new System.Drawing.Size(235, 33);
             this.cbxProfiles.TabIndex = 9;
             this.cbxProfiles.SelectedIndexChanged += new System.EventHandler(this.CbxProfiles_SelectedIndexChanged);
-            // 
-            // textBox1
-            // 
-            this.textBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.textBox1.Location = new System.Drawing.Point(133, 188);
-            this.textBox1.Name = "textBox1";
-            this.textBox1.Size = new System.Drawing.Size(84, 31);
-            this.textBox1.TabIndex = 10;
-            this.textBox1.Text = "50";
-            this.textBox1.TextChanged += new System.EventHandler(this.TextBox1_TextChanged);
-            // 
-            // label1
-            // 
-            this.label1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(12, 191);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(121, 25);
-            this.label1.TabIndex = 11;
-            this.label1.Text = "Выдержка:";
-            // 
-            // label2
-            // 
-            this.label2.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(215, 191);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(38, 25);
-            this.label2.TabIndex = 12;
-            this.label2.Text = "мс";
             // 
             // FrmGameBot
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(12F, 25F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.ButtonFace;
-            this.ClientSize = new System.Drawing.Size(259, 226);
-            this.Controls.Add(this.label2);
-            this.Controls.Add(this.label1);
-            this.Controls.Add(this.textBox1);
+            this.ClientSize = new System.Drawing.Size(259, 193);
             this.Controls.Add(this.cbxProfiles);
             this.Controls.Add(this.btnGameStart);
             this.Controls.Add(this.radNeedClick);
@@ -215,8 +179,5 @@
         private System.Windows.Forms.RadioButton radNeedClick;
         private System.Windows.Forms.Button btnGameStart;
         private System.Windows.Forms.ComboBox cbxProfiles;
-        private System.Windows.Forms.TextBox textBox1;
-        private System.Windows.Forms.Label label1;
-        private System.Windows.Forms.Label label2;
     }
 }
