@@ -159,8 +159,6 @@
             this.MinimumSize = new System.Drawing.Size(47, 92);
             this.Name = "FrmGameBot";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Activated += new System.EventHandler(this.FrmGameBot_Activated);
-            this.Deactivate += new System.EventHandler(this.FrmGameBot_Deactivate);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FrmGameBot_FormClosing);
             this.Shown += new System.EventHandler(this.FrmGameSettings_Shown);
             ((System.ComponentModel.ISupportInitialize)(this.pbScreenField)).EndInit();

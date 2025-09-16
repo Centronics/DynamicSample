@@ -153,9 +153,9 @@ namespace DynamicSample
         ///     Поток, отвечающий за выполнение текущего поискового запроса.
         /// </summary>
         /// <remarks>
-        ///     Хранит значение свойства <see cref="RecognizerThread" />.
+        ///     Хранит значение свойства <see cref="GameBotThread" />.
         /// </remarks>
-        /// <seealso cref="RecognizerThread" />
+        /// <seealso cref="GameBotThread" />
         Thread _recognizerThread;
 
         Thread _escapeThread;
@@ -163,12 +163,6 @@ namespace DynamicSample
         bool _escapeThreadStopFlag;
 
         bool _needSaveProfile;
-
-        int _firstHitX = -1, _firstHitY = -1;
-
-        int _iAmXo = GameSession.EmptyHit;
-
-        bool _isActived;
 
         /// <summary>
         ///     Поток, который останавливает процесс выполнения поискового запроса.
@@ -190,7 +184,7 @@ namespace DynamicSample
         /// </remarks>
         /// <seealso cref="_commonLocker" />
         /// <seealso cref="_recognizerThread" />
-        Thread RecognizerThread
+        Thread GameBotThread
         {
             get
             {
@@ -209,7 +203,7 @@ namespace DynamicSample
             }
         }
 
-        bool EscapeThreadStopFlag
+        bool ProgramStopFlag
         {
             get
             {
@@ -224,25 +218,6 @@ namespace DynamicSample
                 lock (_commonLocker)
                 {
                     _escapeThreadStopFlag = value;
-                }
-            }
-        }
-
-        public bool IsActived
-        {
-            get
-            {
-                lock (_commonLocker)
-                {
-                    return _isActived;
-                }
-            }
-
-            set
-            {
-                lock (_commonLocker)
-                {
-                    _isActived = value;
                 }
             }
         }
@@ -287,7 +262,7 @@ namespace DynamicSample
                 {
                     using (OutputDuplication duplicatedOutput = output1.DuplicateOutput(device))
                     {
-                        Thread.Sleep(100); // захватчику экрана надо время проинициализироваться
+                        Thread.Sleep(100); // Захватчику экрана надо время проинициализироваться.
                         Bitmap bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
                         Resource screenResource = null;
                         try
@@ -329,22 +304,22 @@ namespace DynamicSample
         {
             try
             {
-                while (!EscapeThreadStopFlag)
+                while (!ProgramStopFlag)
                 {
-                    while (!EscapeThreadStopFlag && NativeMethods.GetAsyncKeyState(Keys.Escape) == 0)
+                    while (!ProgramStopFlag && NativeMethods.GetAsyncKeyState(Keys.Escape) == 0)
                         Thread.Sleep(50);
 
-                    while (!EscapeThreadStopFlag && NativeMethods.GetAsyncKeyState(Keys.Escape) != 0)
+                    while (!ProgramStopFlag && NativeMethods.GetAsyncKeyState(Keys.Escape) != 0)
                         Thread.Sleep(10);
 
-                    if (EscapeThreadStopFlag || !(StopperThread is null))
+                    if (ProgramStopFlag || !(StopperThread is null))
                         continue;
 
                     Thread t = new Thread(() =>
                     {
                         try
                         {
-                            if (!StopGameThread() && IsActived)
+                            if (!StopGameBotThread())
                                 SafeExecute(Application.Exit, true);
                         }
                         finally
@@ -386,14 +361,6 @@ namespace DynamicSample
             _needSaveProfile = false;
         }
 
-        void StartNewSession()
-        {
-            _firstHitX = -1;
-            _firstHitY = -1;
-            _iAmXo = GameSession.EmptyHit;
-            GameSession.IsGameCompetitorsInverted = false;
-        }
-
         Bitmap CopyGameFieldFromScreen()
         {
             Rectangle rect = new Rectangle();
@@ -414,10 +381,7 @@ namespace DynamicSample
 
         void FrmGameSettings_Shown(object sender, EventArgs e)
         {
-            pbScreenField.BackColor = Color.Red;
-            //pbScreenField.ForeColor = Color.Red;
-            TransparencyKey = Color.Red; // по умолчанию ЧЕРНЫЙ
-            AllowTransparency = true;
+            TransparencyKey = pbScreenField.BackColor = Color.Red;
 
             _escapeThread = new Thread(EscapeThreadFunc)
             {
@@ -610,102 +574,204 @@ namespace DynamicSample
             return result;
         }
 
-        (Point? competitorHitPoint, bool isEmpty) GetCompetitorHitPoint(ref int[,] map1, ref GameSession map2)
+        void GameHandler(int[,] sessionCopy, ref GameSession gameSession, Dictionary<Size, (BitImages, ProcessorHandler)> pcs, HitCounter hc)
         {
-            if (_firstHitX < 0 || _firstHitY < 0)
+            if (sessionCopy is null)
+                return;
+
+            if (gameSession is null)
+                gameSession = new GameSession();
+
+            GameSession.FieldState fs = GameSession.GetCurrentState(sessionCopy);
+
+            if (gameSession.HitX < 0 || gameSession.HitY < 0)
             {
-                if (map2.HitX > -1 && map2.HitY > -1)
+                switch (fs)
                 {
-                    int iAmxo = map1[map2.HitX, map2.HitY];
+                    case GameSession.FieldState.EMPTY:
+                        gameSession = new GameSession(sessionCopy);
+                        DoFirstHit(gameSession);
+                        return;
+                    case GameSession.FieldState.FULL:
+                        DoClickOperations(pcs);
+                        return;
+                    case GameSession.FieldState.WAITHIT:
+                        {
+                            (int hit, Point hitPoint) = GetAloneHit(sessionCopy);
 
-                    if (iAmxo != GameSession.BotHit && iAmxo != GameSession.UserHit)
-                        return (null, false);
-
-                    _iAmXo = iAmxo;
-                    _firstHitX = map2.HitX;
-                    _firstHitY = map2.HitY;
-                }
-                else
-                {
-                    (int x, int y)? r = GameSession.GetAloneHit(map1);
-
-                    if (r.HasValue)
-                    {
-                        map2 = new GameSession();
-                        return (new Point(r.Value.x, r.Value.y), false);
-                    }
-
-                    map2 = new GameSession(map1);
-                    return (null, true);
+                            switch (hit)
+                            {
+                                case GameSession.EmptyHit:
+                                    DoUnknownHit(gameSession);
+                                    return;
+                                case GameSession.UserHit:
+                                    if (GameSession.IsGameCompetitorsInverted)
+                                        GameSession.IsGameCompetitorsInverted = false;
+                                    else
+                                        DoGameHit(gameSession, hitPoint);
+                                    return;
+                                case GameSession.BotHit:
+                                    if (GameSession.IsGameCompetitorsInverted)
+                                        DoGameHit(gameSession, hitPoint);
+                                    else
+                                        GameSession.IsGameCompetitorsInverted = true;
+                                    return;
+                                default:
+                                    throw new Exception($@"Что-то пошло не так, удар ({hit}).");
+                            }
+                        }
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
             }
-            else
-            {
-                int iAmxo = map1[_firstHitX, _firstHitY];
 
-                if (iAmxo != GameSession.BotHit && iAmxo != GameSession.UserHit || iAmxo != _iAmXo)
-                    return (null, false);
+            if (fs == GameSession.FieldState.EMPTY)
+            {
+                if (DoClickOperations(pcs))
+                    return;
+
+                gameSession.FixGameStep();
+                gameSession = new GameSession(sessionCopy);
+                DoFirstHit(gameSession);
+
+                return;
             }
 
-            bool mapIsEmpty = true;
-            Point result = new Point();
+            switch (sessionCopy[gameSession.HitX, gameSession.HitY])
+            {
+                case GameSession.UserHit:
+                    GameSession.IsGameCompetitorsInverted = true;
+                    return;
+            }
+
+            Point hp = new Point();
             int diffCount = 0;
 
             for (int y = 0; y < 3; y++)
                 for (int x = 0; x < 3; x++)
                 {
-                    int m1 = map1[x, y];
-                    int m2 = map2[x, y];
-
-                    if (m1 != GameSession.EmptyHit)
-                        mapIsEmpty = false;
+                    int m1 = sessionCopy[x, y];
+                    int m2 = gameSession[x, y];
 
                     if (m1 == m2)
                         continue;
 
-                    if (m1 == GameSession.EmptyHit || m2 != GameSession.EmptyHit ||
-                        (_iAmXo == GameSession.UserHit && m1 != GameSession.BotHit) ||
-                        (_iAmXo == GameSession.BotHit && m1 != GameSession.UserHit))
-                        return (null, false);
+                    if (m1 != GameSession.EmptyHit && m2 != GameSession.EmptyHit)
+                    {
+                        gameSession = new GameSession(sessionCopy);
+                        DoClickOperations(pcs);
+                        return;
+                    }
 
-                    result = new Point(x, y);
+                    if (m1 == GameSession.EmptyHit && m2 != GameSession.EmptyHit)
+                    {
+                        if (x == gameSession.HitX && y == gameSession.HitY)
+                            continue;
+
+                        if (DoClickOperations(pcs))
+                            return;
+
+                        gameSession = new GameSession(sessionCopy);
+                        DoUnknownHit(gameSession);
+                        return;
+                    }
+
+                    hp = new Point(x, y);
                     ++diffCount;
                 }
 
             if (diffCount < 1)
             {
-                map1 = null;
-                return (null, mapIsEmpty);
+                DoClickOperations(pcs);
+                return;
             }
 
-            if (diffCount > 1)
-                return (null, false);
+            if (diffCount == 1)
+            {
+                DoGameHit(gameSession, hp);
+                return;
+            }
 
-            return (result, mapIsEmpty);
+            if (DoClickOperations(pcs))
+                return;
+
+            gameSession = new GameSession(sessionCopy);
+            DoUnknownHit(gameSession);
+
+            return;
+
+            (int hit, Point hitPoint) GetAloneHit(int[,] mp)
+            {
+                if (mp is null)
+                    throw new ArgumentNullException();
+
+                (int hit, Point hitPoint) result = new ValueTuple<int, Point>();
+
+                for (int y = 0, mY = mp.GetLength(1); y < mY; y++)
+                    for (int x = 0, mX = mp.GetLength(0); x < mX; x++)
+                    {
+                        int v = mp[x, y];
+
+                        if (v == GameSession.EmptyHit)
+                            continue;
+
+                        if (result.hit != GameSession.EmptyHit)
+                            return (GameSession.EmptyHit, new Point());
+
+                        result = (v, new Point(x, y));
+                    }
+
+                return result;
+            }
+
+            void DoUnknownHit(GameSession gs)
+            {
+                (int x, int y) = gs.MakeHitDecision();
+
+                if (!gs.MakeBotHit(x, y))
+                    throw new Exception($@"Странное решение ({x}, {y}).");
+
+                DoPhysicalHit(x, y);
+            }
+
+            void DoFirstHit(GameSession gs)
+            {
+                hc.Inc();
+                gs.MakeBotHit(hc.Counter % 3, hc.Counter / 3);
+                DoPhysicalHit(gs.HitX, gs.HitY);
+            }
+
+            void DoGameHit(GameSession gs, Point hitPoint)
+            {
+                if (!gs.MakeUserHit(hitPoint.X, hitPoint.Y))
+                    throw new Exception(
+                        $@"Что-то пошло не так ({hitPoint.X}, {hitPoint.Y}).");
+
+                if (gs.CurrentWinner != GameSession.Winner.NOBODY)
+                    return;
+
+                (int x, int y) = gs.MakeHitDecision();
+
+                if (!gs.MakeBotHit(x, y))
+                    throw new Exception($@"Странное решение ({x}, {y}).");
+
+                DoPhysicalHit(x, y);
+            }
         }
 
         ProcessorContainer ProcessorContainerFromSettings => new ProcessorContainer(_selectedProfileSettings.Spaces.Select((bi, bx) => new Processor(bi.AsBitmap, $@"{bi.Name}{bx}")).ToArray());
 
-        int[,] BuildField(IDictionary<Size, (BitImages, ProcessorHandler)> ps = null, ProcessorContainer req = null)
+        int[,] BuildField(ProcessorContainer req = null)
         {
-            Bitmap fullFrameNow = null;
-
-            if (!(ps is null) && DoClickOperations(ps, out fullFrameNow))
-            {
-                Thread.Sleep(1000);
-                fullFrameNow = TakeScreenshot();
-            }
-            else if (fullFrameNow is null)
-                fullFrameNow = TakeScreenshot();
+            Bitmap fullFrameNow = TakeScreenshot();
 
             if (fullFrameNow is null)
                 return null;
 
             while (true)
             {
-                Bitmap now = fullFrameNow;
                 IEnumerable<Processor> pq1 = _selectedProfileSettings.Spaces.Select(bi =>
-                    new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), now), @"Z"));
+                    new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z"));
 
                 if (req is null)
                     req = ProcessorContainerFromSettings;
@@ -790,160 +856,62 @@ namespace DynamicSample
 
         void GameThreadFunction()
         {
-            StartNewSession();
-            GameSession gameSession = new GameSession();
-            int gameAttempts = 0;
-
-            Dictionary<Size, (BitImages, ProcessorHandler)> pcs = EventClickHandlers;
-            ProcessorContainer req = ProcessorContainerFromSettings;
-            HitCounter hc = _selectedProfileSettings.StartHitCounter;
-
-            while (true)
+            try
             {
-                try
-                {
-                    int[,] sessionCopy = BuildField(pcs, req);
+                Dictionary<Size, (BitImages, ProcessorHandler)> pcs = EventClickHandlers;
+                ProcessorContainer req = ProcessorContainerFromSettings;
+                HitCounter hc = _selectedProfileSettings.StartHitCounter;
 
-                    if (sessionCopy is null)
+                DoClickOperations(pcs);
+
+                GameSession gameSession = null;
+
+                while (true)
+                {
+                    int[,] sessionCopy = BuildField(req);
+
+                    GameHandler(sessionCopy, ref gameSession, pcs, hc);
+
+                    if (sessionCopy is null && !DoClickOperations(pcs))
                         break;
-
-                    (Point? competitorHitPoint, bool isEmpty) = GetCompetitorHitPoint(ref sessionCopy, ref gameSession);
-
-                    if (isEmpty)
-                    {
-                        GameSession.FixGameStep();
-                        StartNewSession();
-                        gameSession = new GameSession();
-                        gameAttempts = 0;
-
-                        int myHit, myHitStart = hc.Counter;
-                        bool hOk = false;
-
-                        do
-                        {
-                            myHit = hc.Counter;
-                            hc.Inc();
-
-                            if (!gameSession.MakeTargetHit(myHit % 3, myHit / 3))
-                                continue;
-
-                            hOk = true;
-                            break;
-                        } while (myHit != myHitStart);
-
-                        if (!hOk)
-                        {
-                            StartNewSession();
-                            gameSession = new GameSession();
-                            continue;
-                        }
-
-                        DoPhysicalHit(gameSession.HitX, gameSession.HitY);
-
-                        Thread.Sleep(1000);
-
-                        int[,] bf = BuildField(pcs, req);
-
-                        if (bf is null)
-                            break;
-
-                        int ht = bf[gameSession.HitX, gameSession.HitY];
-
-                        if (ht != GameSession.EmptyHit)
-                        {
-                            GameSession.IsGameCompetitorsInverted = ht == GameSession.UserHit;
-                            _iAmXo = GameSession.IsGameCompetitorsInverted
-                                ? GameSession.UserHit
-                                : GameSession.BotHit;
-
-                            gameSession.CorrectLastHit();
-                        }
-
-                        continue;
-                    }
-
-                    if (!competitorHitPoint.HasValue)
-                    {
-                        if (sessionCopy is null)
-                        {
-                            Thread.Sleep(50);
-                            continue;
-                        }
-
-                        if (gameAttempts < 2)
-                        {
-                            ++gameAttempts;
-                            Thread.Sleep(1000);
-                            continue;
-                        }
-
-                        GameSession.FixGameStep();
-                        StartNewSession();
-                        gameSession = new GameSession();
-                        gameAttempts = 0;
-                        continue;
-                    }
-
-                    gameAttempts = 0;
-
-                    if (!gameSession.MakeCompetitorHit(competitorHitPoint.Value.X, competitorHitPoint.Value.Y))
-                        throw new Exception($@"Что-то пошло не так ({competitorHitPoint.Value.X}, {competitorHitPoint.Value.Y}).");
-
-                    switch (gameSession.CurrentWinner)
-                    {
-                        case GameSession.Winner.NOBODY:
-                            gameSession.MakeHitDecision();
-                            DoPhysicalHit(gameSession.HitX, gameSession.HitY);
-
-                            if (_iAmXo == GameSession.EmptyHit)
-                            {
-                                Thread.Sleep(1000);
-
-                                int[,] bf = BuildField(pcs, req);
-
-                                if (bf is null)
-                                    break;
-
-                                int ht = bf[gameSession.HitX, gameSession.HitY];
-
-                                if (ht != GameSession.EmptyHit)
-                                {
-                                    GameSession.IsGameCompetitorsInverted = ht == GameSession.UserHit;
-                                    _iAmXo = GameSession.IsGameCompetitorsInverted
-                                        ? GameSession.UserHit
-                                        : GameSession.BotHit;
-
-                                    gameSession.CorrectLastHit();
-                                }
-                            }
-
-                            break;
-                        case GameSession.Winner.STANDOFF:
-                        case GameSession.Winner.USER:
-                        case GameSession.Winner.BOT:
-                            GameSession.FixGameStep();
-                            StartNewSession();
-                            gameSession = new GameSession();
-                            break;
-                        default:
-                            throw new ArgumentOutOfRangeException();
-                    }
                 }
-                catch (ThreadAbortException)
+            }
+            catch (ThreadAbortException)
+            {
+                ResetAbort();
+            }
+            catch (Exception ex)
+            {
+                SafeExecute(() => MessageBox.Show(this, ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error), true);
+            }
+            finally
+            {
+                GameBotThread = null;
+
+                if (!ProgramStopFlag)
                 {
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    SafeExecute(() => MessageBox.Show(this, ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error), true);
-                    break;
+                    BeginInvoke(new Action(() => SafeExecute(() =>
+                    {
+                        if (ProgramStopFlag)
+                            return;
+
+                        radNeedClick.Enabled = true;
+                        radEmptySpace.Enabled = true;
+                        radField_X.Enabled = true;
+                        radField_O.Enabled = true;
+                        btnSavePosition.Enabled = true;
+                        btnGameStart.Text = _btnStartCaption;
+                    })));
                 }
             }
         }
 
-        bool DoClickOperations(IDictionary<Size, (BitImages, ProcessorHandler)> ps, out Bitmap fullFrameNow)
+        bool DoClickOperations(IDictionary<Size, (BitImages, ProcessorHandler)> ps)
         {
-            fullFrameNow = TakeScreenshot();
+            if (ps is null)
+                return false;
+
+            Bitmap fullFrameNow = TakeScreenshot();
 
             if (fullFrameNow is null)
                 return false;
@@ -987,9 +955,9 @@ namespace DynamicSample
             }
         }
 
-        bool StopGameThread()
+        bool StopGameBotThread()
         {
-            Thread rt = RecognizerThread;
+            Thread rt = GameBotThread;
 
             if (rt is null)
                 return false;
@@ -997,7 +965,9 @@ namespace DynamicSample
             rt.Abort();
             rt.Join();
 
-            if (EscapeThreadStopFlag)
+            GameBotThread = null;
+
+            if (ProgramStopFlag)
                 return true;
 
             SafeExecute(() =>
@@ -1010,8 +980,6 @@ namespace DynamicSample
                 btnGameStart.Text = _btnStartCaption;
             }, true);
 
-            RecognizerThread = null;
-
             return true;
         }
 
@@ -1019,7 +987,7 @@ namespace DynamicSample
         {
             SafeExecute(() =>
             {
-                if (StopGameThread())
+                if (StopGameBotThread())
                     return;
 
                 if (!UpdateProfileStatus(false))
@@ -1071,7 +1039,7 @@ namespace DynamicSample
 
                 t.Start();
 
-                RecognizerThread = t;
+                GameBotThread = t;
             });
         }
 
@@ -1160,8 +1128,8 @@ namespace DynamicSample
 
             try
             {
-                EscapeThreadStopFlag = true;
-                StopGameThread();
+                ProgramStopFlag = true;
+                StopGameBotThread();
                 _escapeThread?.Join();
             }
             catch
@@ -1209,10 +1177,6 @@ namespace DynamicSample
                 MessageBox.Show(this, ex.Message, @"Ошибка");
             }
         }
-
-        void FrmGameBot_Activated(object sender, EventArgs e) => IsActived = true;
-
-        void FrmGameBot_Deactivate(object sender, EventArgs e) => IsActived = false;
 
         /// <summary>
         ///     Получает или задаёт поток, который останавливает процесс выполнения поискового запроса.

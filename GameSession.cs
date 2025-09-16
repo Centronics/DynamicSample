@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 
 namespace DynamicSample
@@ -20,6 +21,13 @@ namespace DynamicSample
             STANDOFF,
             INVERT,
             TOTAL
+        }
+
+        public enum FieldState
+        {
+            EMPTY,
+            WAITHIT,
+            FULL
         }
 
         public const int EmptyHit = 0;
@@ -72,11 +80,24 @@ namespace DynamicSample
 
         public int this[int x, int y] => _gameField[x, y];
 
-        public void CorrectLastHit()
+        public static FieldState GetCurrentState(int[,] gameField)
         {
-            if (HitX >= 0 && HitX < _gameField.GetLength(0) &&
-                HitY >= 0 && HitY < _gameField.GetLength(1))
-                _gameField[HitX, HitY] = IsGameCompetitorsInverted ? BotHit : UserHit;
+            if (gameField is null)
+                throw new ArgumentNullException();
+
+            if (GetFieldHero(gameField, EmptyHit) == gameField.Length)
+                return FieldState.EMPTY;
+
+            if (GetCurrentWinner(gameField) != Winner.NOBODY)
+                return FieldState.FULL;
+
+            int uCount = GetFieldHero(gameField, UserHit);
+            int bCount = GetFieldHero(gameField, BotHit);
+
+            if (uCount == bCount)
+                return FieldState.WAITHIT;
+
+            return Math.Abs(uCount - bCount) != 1 ? FieldState.FULL : FieldState.WAITHIT;
         }
 
         public override bool Equals(object obj)
@@ -123,120 +144,128 @@ namespace DynamicSample
 
         public static bool operator !=(GameSession a, GameSession b) => !(a == b);
 
-        public Winner CurrentWinner
+        public Winner CurrentWinner => GetCurrentWinner(_gameField);
+
+        public static Winner GetCurrentWinner(int[,] gameField)
         {
-            get
+            bool bh = IsLine(BotHit);
+
+            switch (IsLine(UserHit))
             {
-                bool bh = IsLine(BotHit);
+                case true when bh:
+                    return Winner.STANDOFF;
+                case true:
+                    return Winner.USER;
+                case false when bh:
+                    return Winner.BOT;
+            }
 
-                switch (IsLine(UserHit))
-                {
-                    case true when bh:
-                        return Winner.STANDOFF;
-                    case true:
-                        return Winner.USER;
-                    case false when bh:
-                        return Winner.BOT;
-                }
+            for (int y = 0, mY = gameField.GetLength(1); y < mY; y++)
+                for (int x = 0, mX = gameField.GetLength(0); x < mX; x++)
+                    if (gameField[x, y] == EmptyHit)
+                        return Winner.NOBODY;
 
-                for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                    for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                        if (_gameField[x, y] == EmptyHit)
-                            return Winner.NOBODY;
+            return Winner.STANDOFF;
 
-                return Winner.STANDOFF;
+            bool IsLine(int sv)
+            {
+                if (gameField[0, 0] == sv && gameField[1, 0] == sv &&
+                    gameField[2, 0] == sv)
+                    return true;
 
-                bool IsLine(int sv)
-                {
-                    if (_gameField[0, 0] == sv && _gameField[1, 0] == sv &&
-                        _gameField[2, 0] == sv)
-                        return true;
+                if (gameField[0, 1] == sv && gameField[1, 1] == sv &&
+                    gameField[2, 1] == sv)
+                    return true;
 
-                    if (_gameField[0, 1] == sv && _gameField[1, 1] == sv &&
-                        _gameField[2, 1] == sv)
-                        return true;
+                if (gameField[0, 2] == sv && gameField[1, 2] == sv &&
+                    gameField[2, 2] == sv)
+                    return true;
 
-                    if (_gameField[0, 2] == sv && _gameField[1, 2] == sv &&
-                        _gameField[2, 2] == sv)
-                        return true;
+                if (gameField[0, 0] == sv && gameField[0, 1] == sv &&
+                    gameField[0, 2] == sv)
+                    return true;
 
-                    if (_gameField[0, 0] == sv && _gameField[0, 1] == sv &&
-                        _gameField[0, 2] == sv)
-                        return true;
+                if (gameField[1, 0] == sv && gameField[1, 1] == sv &&
+                    gameField[1, 2] == sv)
+                    return true;
 
-                    if (_gameField[1, 0] == sv && _gameField[1, 1] == sv &&
-                        _gameField[1, 2] == sv)
-                        return true;
+                if (gameField[2, 0] == sv && gameField[2, 1] == sv &&
+                    gameField[2, 2] == sv)
+                    return true;
 
-                    if (_gameField[2, 0] == sv && _gameField[2, 1] == sv &&
-                        _gameField[2, 2] == sv)
-                        return true;
+                if (gameField[0, 0] == sv && gameField[1, 1] == sv &&
+                    gameField[2, 2] == sv)
+                    return true;
 
-                    if (_gameField[0, 0] == sv && _gameField[1, 1] == sv &&
-                        _gameField[2, 2] == sv)
-                        return true;
-
-                    return _gameField[0, 2] == sv && _gameField[1, 1] == sv &&
-                           _gameField[2, 0] == sv;
-                }
+                return gameField[0, 2] == sv && gameField[1, 1] == sv &&
+                       gameField[2, 0] == sv;
             }
         }
 
-        public void Invert()
+        static int GetFieldHero(int[,] gameField, int hero)
         {
-            if (IsGameCompetitorsInverted)
-                return;
+            int hCount = 0;
 
-            for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                {
-                    switch (_gameField[x, y])
-                    {
-                        case UserHit:
-                            _gameField[x, y] = BotHit;
-                            continue;
-                        case BotHit:
-                            _gameField[x, y] = UserHit;
-                            break;
-                    }
-                }
+            for (int y = 0, mY = gameField.GetLength(1); y < mY; y++)
+                for (int x = 0, mX = gameField.GetLength(0); x < mX; x++)
+                    if (gameField[x, y] == hero)
+                        ++hCount;
+
+            return hCount;
         }
 
-        public static void FixGameStep()
+        public void FixGameStep()
         {
-            if (_lastBotHit is null)
-                return;
-
-            _lastBotHit.Invert();
-
-            if (_lastBotHit.HowChangeFrame(InterModel.INVERT) != 0)
+            switch (CurrentWinner)
             {
-                _lastBotHit = null;
-                return;
-            }
-
-            switch (_lastBotHit.CurrentModel)
-            {
-                case InterModel.STANDOFF:
+                case Winner.NOBODY:
                     break;
-                case InterModel.TOTAL:
-                    SessionsTotal.Add(_lastBotHit);
-                    break;
+                case Winner.BOT:
+                case Winner.USER:
+                case Winner.STANDOFF:
+                    return;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
 
-            SessionsStandoff.Add(_lastBotHit);
+            if (_lastBotHit is null)
+                return;
 
-            _lastBotHit = null;
+            Point? wp = null;
+
+            for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
+                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
+                    if (_gameField[x, y] == EmptyHit)
+                    {
+                        _gameField[x, y] = UserHit;
+                        Winner cw = CurrentWinner;
+                        _gameField[x, y] = EmptyHit;
+
+                        if (cw == Winner.STANDOFF && wp is null)
+                        {
+                            wp = new Point(x, y);
+                            continue;
+                        }
+
+                        if (cw != Winner.USER)
+                            continue;
+
+                        if (!MakeUserHit(x, y))
+                            throw new InvalidOperationException();
+
+                        return;
+                    }
+
+            if (wp is null)
+                return;
+
+            if (!MakeUserHit(wp.Value.X, wp.Value.Y))
+                throw new InvalidOperationException();
         }
 
-        public bool MakeCompetitorHit(int x, int y)
-        {
-            return MakeHit(x, y, IsGameCompetitorsInverted ? UserHit : BotHit);
-        }
+        public bool MakeUserHit(int x, int y) => MakeHit(x, y, UserHit);
 
-        public bool MakeTargetHit(int x, int y) => MakeHit(x, y, UserHit);
+        public bool MakeBotHit(int x, int y) => MakeHit(x, y, BotHit);
 
         bool MakeHit(int x, int y, int hit)
         {
@@ -245,34 +274,33 @@ namespace DynamicSample
 
             _gameField[x, y] = hit;
 
-            HitX = x;
-            HitY = y;
+            if (hit == BotHit)
+            {
+                HitX = x;
+                HitY = y;
+            }
+
+            HitFeedBack();
+
+            return true;
+        }
+
+        void HitFeedBack()
+        {
+            if (_lastBotHit is null)
+                return;
 
             Winner cw = CurrentWinner;
 
-            if (IsGameCompetitorsInverted)
-                switch (cw)
-                {
-                    case Winner.BOT:
-                        cw = Winner.USER;
-                        break;
-                    case Winner.USER:
-                        cw = Winner.BOT;
-                        break;
-                }
-
             switch (cw)
             {
+                case Winner.NOBODY:
+                    break;
                 case Winner.BOT:
                     _lastBotHit = null;
                     break;
-                case Winner.NOBODY:
-                    break;
                 case Winner.USER:
                 case Winner.STANDOFF:
-
-                    if (_lastBotHit is null)
-                        return true;
 
                     switch (_lastBotHit.CurrentModel)
                     {
@@ -295,50 +323,12 @@ namespace DynamicSample
                 default:
                     throw new ArgumentOutOfRangeException();
             }
-
-            return true;
         }
 
-        public void MakeHitDecision()
+        public (int x, int y) MakeHitDecision()
         {
             GameSession p = HowChangeFrame() ?? throw new InvalidDataException();
-
-            int x = p.HitX, y = p.HitY;
-
-            if (_gameField[x, y] != EmptyHit)
-                throw new Exception(
-                    $@"Внутренняя ошибка: бот попытался ударить в то место, где уже занято ({x}, {y}).");
-
-            _gameField[x, y] = IsGameCompetitorsInverted ? BotHit : UserHit;
-
-            HitX = x;
-            HitY = y;
-        }
-
-        public int HowChangeFrame(InterModel interModel)
-        {
-            int resultLength = int.MaxValue;
-
-            while (true)
-            {
-                int ctxLength = 0;
-                (GameSession frame, bool end) = NextFrame(true, null, ref ctxLength, interModel);
-
-                if (end)
-                    break;
-
-                if (frame is null)
-                    continue;
-
-                if (ctxLength >= resultLength)
-                    continue;
-
-                resultLength = ctxLength;
-            }
-
-            _curY = _curX = 0;
-
-            return resultLength;
+            return (p.HitX, p.HitY);
         }
 
         GameSession HowChangeFrame()
@@ -537,28 +527,6 @@ namespace DynamicSample
             for (int y = 0; y < sY; y++)
                 for (int x = 0; x < sX; x++)
                     result[x, y] = map[x, y];
-
-            return result;
-        }
-
-        public static (int x, int y)? GetAloneHit(int[,] map)
-        {
-            if (map is null)
-                return null;
-
-            (int x, int y)? result = null;
-
-            for (int y = 0; y < map.GetLength(1); y++)
-                for (int x = 0; x < map.GetLength(0); x++)
-                {
-                    if (map[x, y] == EmptyHit)
-                        continue;
-
-                    if (!result.HasValue)
-                        result = (x, y);
-                    else
-                        return null;
-                }
 
             return result;
         }
