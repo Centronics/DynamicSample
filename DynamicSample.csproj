@@ -92,6 +92,7 @@
     </Compile>
     <Compile Include="GameSession.cs" />
     <Compile Include="HashCreator.cs" />
+    <Compile Include="Logger.cs" />
     <Compile Include="ProcessorHandler.cs" />
     <Compile Include="Launcher.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

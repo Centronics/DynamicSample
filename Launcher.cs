@@ -8,21 +8,46 @@ namespace DynamicSample
     {
         public static bool InvertModeEnabled { get; private set; }
 
-        public static bool IsDebugLogEnabled { get; private set; }
+        public static bool DebugLogEnabled { get; private set; }
+
+        public static bool ExplicitLogEnabled { get; private set; }
 
         [STAThread]
         static void Main(string[] args)
         {
-            InvertModeEnabled = GetParameter(IsInvertMode);
-            IsDebugLogEnabled = GetParameter(IsDebugLog);
+            try
+            {
+                Logger.Initialize();
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+                try
+                {
+                    InvertModeEnabled = GetParameter(IsInvertMode);
+                    DebugLogEnabled = GetParameter(IsDebugLog);
+                    ExplicitLogEnabled = GetParameter(IsExplicitLog);
 
-            if (GetParameter(IsBotMode))
-                Application.Run(new FrmGameBot());
-            else
-                Application.Run(new FrmSample());
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+
+                    if (GetParameter(IsBotMode))
+                    {
+                        Logger.WriteLog(@"Игра началась. Режим бота включен...");
+                        Application.Run(new FrmGameBot());
+                    }
+                    else
+                    {
+                        Logger.WriteLog(@"Start game. Bot mode is off...");
+                        Application.Run(new FrmSample());
+                    }
+                }
+                finally
+                {
+                    Logger.Deinitialize();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
 
             return;
 
@@ -33,6 +58,8 @@ namespace DynamicSample
             bool IsBotMode(string s) => string.Compare(s, @"-bot", StringComparison.OrdinalIgnoreCase) == 0;
 
             bool IsDebugLog(string s) => string.Compare(s, @"-debuglog", StringComparison.OrdinalIgnoreCase) == 0;
+
+            bool IsExplicitLog(string s) => string.Compare(s, @"-explicitlog", StringComparison.OrdinalIgnoreCase) == 0;
         }
     }
 }

@@ -580,7 +580,10 @@ namespace DynamicSample
                 return;
 
             if (gameSession is null)
+            {
                 gameSession = new GameSession();
+                GameSession.IsGameCompetitorsInverted = false;
+            }
 
             GameSession.FieldState fs = GameSession.GetCurrentState(sessionCopy);
 
@@ -591,9 +594,11 @@ namespace DynamicSample
                     case GameSession.FieldState.EMPTY:
                         gameSession = new GameSession(sessionCopy);
                         DoFirstHit(gameSession);
+                        GameSession.IsGameCompetitorsInverted = false;
                         return;
                     case GameSession.FieldState.FULL:
                         DoClickOperations(pcs);
+                        GameSession.IsGameCompetitorsInverted = false;
                         return;
                     case GameSession.FieldState.WAITHIT:
                         {
@@ -603,18 +608,15 @@ namespace DynamicSample
                             {
                                 case GameSession.EmptyHit:
                                     DoUnknownHit(gameSession);
+                                    GameSession.IsGameCompetitorsInverted = false;
                                     return;
                                 case GameSession.UserHit:
-                                    if (GameSession.IsGameCompetitorsInverted)
-                                        GameSession.IsGameCompetitorsInverted = false;
-                                    else
-                                        DoGameHit(gameSession, hitPoint);
+                                    DoGameHit(gameSession, hitPoint);
+                                    GameSession.IsGameCompetitorsInverted = false;
                                     return;
                                 case GameSession.BotHit:
-                                    if (GameSession.IsGameCompetitorsInverted)
-                                        DoGameHit(gameSession, hitPoint);
-                                    else
-                                        GameSession.IsGameCompetitorsInverted = true;
+                                    GameSession.IsGameCompetitorsInverted = true;
+                                    DoGameHit(gameSession, hitPoint);
                                     return;
                                 default:
                                     throw new Exception($@"Что-то пошло не так, удар ({hit}).");
@@ -628,11 +630,15 @@ namespace DynamicSample
             if (fs == GameSession.FieldState.EMPTY)
             {
                 if (DoClickOperations(pcs))
+                {
+                    GameSession.IsGameCompetitorsInverted = false;
                     return;
+                }
 
                 gameSession.FixGameStep();
                 gameSession = new GameSession(sessionCopy);
                 DoFirstHit(gameSession);
+                GameSession.IsGameCompetitorsInverted = false;
 
                 return;
             }
@@ -660,6 +666,7 @@ namespace DynamicSample
                     {
                         gameSession = new GameSession(sessionCopy);
                         DoClickOperations(pcs);
+                        GameSession.IsGameCompetitorsInverted = false;
                         return;
                     }
 
@@ -669,10 +676,14 @@ namespace DynamicSample
                             continue;
 
                         if (DoClickOperations(pcs))
+                        {
+                            GameSession.IsGameCompetitorsInverted = false;
                             return;
+                        }
 
                         gameSession = new GameSession(sessionCopy);
                         DoUnknownHit(gameSession);
+                        GameSession.IsGameCompetitorsInverted = false;
                         return;
                     }
 
@@ -682,7 +693,8 @@ namespace DynamicSample
 
             if (diffCount < 1)
             {
-                DoClickOperations(pcs);
+                if (DoClickOperations(pcs))
+                    GameSession.IsGameCompetitorsInverted = false;
                 return;
             }
 
@@ -693,10 +705,14 @@ namespace DynamicSample
             }
 
             if (DoClickOperations(pcs))
+            {
+                GameSession.IsGameCompetitorsInverted = false;
                 return;
+            }
 
             gameSession = new GameSession(sessionCopy);
             DoUnknownHit(gameSession);
+            GameSession.IsGameCompetitorsInverted = false;
 
             return;
 
