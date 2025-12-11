@@ -40,44 +40,46 @@ namespace DynamicSample
         /// <param name="p">Карта, для которой необходимо вычислить хеш.</param>
         /// <returns>Возвращает хеш-код указанной карты.</returns>
         /// <remarks>
+        ///     Перечисление элементов указанного массива чисел происходит последовательно: от меньшего индекса к большему.
         ///     Карта не может быть равна <see langword="null" />, иначе будет выброшено исключение <see cref="ArgumentNullException" />.
         /// </remarks>
         /// <exception cref="ArgumentNullException" />
         public static int GetHash(Processor p)
         {
-            return GetProcessorBytes(p).Aggregate(255,
+            return GetBytes(p).Aggregate(255,
                 (currentValue, currentByte) => Table[unchecked((byte)(currentValue ^ currentByte))]);
         }
 
         /// <summary>
-        ///     Получает хеш-код указанной карты, без учёта значения свойства <see cref="Processor.Tag" />.
+        ///     Получает хеш-код указанного массива чисел.
         /// </summary>
-        /// <param name="p">Карта, для которой необходимо вычислить хеш.</param>
-        /// <returns>Возвращает хеш-код указанной карты.</returns>
+        /// <param name="p">Массив чисел, для которого необходимо вычислить хеш.</param>
+        /// <returns>Возвращает хеш-код указанного массива чисел.</returns>
         /// <remarks>
-        ///     Карта не может быть равна <see langword="null" />, иначе будет выброшено исключение <see cref="ArgumentNullException" />.
+        ///     Перечисление элементов указанного массива чисел происходит последовательно: от меньшего индекса к большему.
+        ///     Массив чисел не может быть равен <see langword="null" />, иначе будет выброшено исключение <see cref="ArgumentNullException" />.
         /// </remarks>
         /// <exception cref="ArgumentNullException" />
         public static int GetHash(IEnumerable<int> p)
         {
-            return GetProcessorBytes(p).Aggregate(255,
+            return GetBytes(p).Aggregate(255,
                 (currentValue, currentByte) => Table[unchecked((byte)(currentValue ^ currentByte))]);
         }
 
         /// <summary>
-        ///     Представляет содержимое указанной карты в виде последовательности байт.
+        ///     Представляет содержимое указанного массива чисел в виде последовательности байт.
         /// </summary>
-        /// <param name="p">Карта, содержимое которой необходимо получить.</param>
-        /// <returns>Возвращает содержимое карты в виде последовательности байт.</returns>
+        /// <param name="p">Массив чисел, содержимое которого необходимо получить.</param>
+        /// <returns>Возвращает содержимое указанного массива чисел в виде последовательности байт.</returns>
         /// <remarks>
-        ///     Поле <see cref="Processor.Tag" /> не учитывается.
-        ///     Перечисление строк карты происходит последовательно: от меньшего индекса к большему.
+        ///     Перечисление элементов указанного массива чисел происходит последовательно: от меньшего индекса к большему.
+        ///     Массив чисел не может быть равен <see langword="null" />, иначе будет выброшено исключение <see cref="ArgumentNullException" />.
         /// </remarks>
         /// <exception cref="ArgumentNullException" />
-        static IEnumerable<byte> GetProcessorBytes(IEnumerable<int> p)
+        static IEnumerable<byte> GetBytes(IEnumerable<int> p)
         {
             if (p == null)
-                throw new ArgumentNullException(nameof(p), $@"{nameof(GetProcessorBytes)}: Карта равна значению null.");
+                throw new ArgumentNullException(nameof(p), $@"{nameof(GetBytes)}: Массив чисел не указан.");
 
             foreach (int i in p)
                 foreach (byte r in BitConverter.GetBytes(i))
@@ -85,19 +87,19 @@ namespace DynamicSample
         }
 
         /// <summary>
-        ///     Представляет содержимое указанной карты в виде последовательности байт.
+        ///     Представляет содержимое указанной карты в виде последовательности байт, без учёта значения свойства <see cref="Processor.Tag" />.
         /// </summary>
         /// <param name="p">Карта, содержимое которой необходимо получить.</param>
         /// <returns>Возвращает содержимое карты в виде последовательности байт.</returns>
         /// <remarks>
-        ///     Поле <see cref="Processor.Tag" /> не учитывается.
         ///     Перечисление строк карты происходит последовательно: от меньшего индекса к большему.
+        ///     Карта не может быть равна <see langword="null" />, иначе будет выброшено исключение <see cref="ArgumentNullException" />.
         /// </remarks>
         /// <exception cref="ArgumentNullException" />
-        static IEnumerable<byte> GetProcessorBytes(Processor p)
+        static IEnumerable<byte> GetBytes(Processor p)
         {
             if (p == null)
-                throw new ArgumentNullException(nameof(p), $@"{nameof(GetProcessorBytes)}: Карта равна значению null.");
+                throw new ArgumentNullException(nameof(p), $@"{nameof(GetBytes)}: Карта равна значению null.");
 
             for (int y = 0; y < p.Height; y++)
                 for (int x = 0; x < p.Width; x++)

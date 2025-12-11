@@ -8,6 +8,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using System.Xml.Serialization;
@@ -100,6 +101,18 @@ namespace DynamicSample
                             return bmp;
                         }
                     }
+
+                    public override string ToString()
+                    {
+                        StringBuilder sb = new StringBuilder();
+
+                        sb.AppendLine($@"{nameof(FieldSize)} = ({FieldSize.Width}) x ({FieldSize.Height})");
+                        sb.AppendLine($@"{nameof(Name)} = {Name}");
+                        sb.AppendLine($@"{nameof(Coords)} = ({Coords.X}, {Coords.Y})");
+                        sb.AppendLine($@"{nameof(Data)}.Length = {Data.Count}");
+
+                        return sb.ToString();
+                    }
                 }
 
                 public List<BitImages> Spaces { get; set; } = new List<BitImages>();
@@ -127,17 +140,26 @@ namespace DynamicSample
                         using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Open))
                             return (SettingsProfilesArray)ser.Deserialize(fs);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Logger.WriteLog(() => $@"{nameof(SettingsProfilesArray)}(get): {ex.Message}", Logger.LogLevel.ERROR);
                         return new SettingsProfilesArray();
                     }
                 }
 
                 set
                 {
-                    XmlSerializer ser = new XmlSerializer(typeof(SettingsProfilesArray));
-                    using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Create))
-                        ser.Serialize(fs, value);
+                    try
+                    {
+                        XmlSerializer ser = new XmlSerializer(typeof(SettingsProfilesArray));
+                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Create))
+                            ser.Serialize(fs, value);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(SettingsProfilesArray)}(set): {ex.Message}", Logger.LogLevel.ERROR);
+                        throw;
+                    }
                 }
             }
         }
@@ -269,7 +291,10 @@ namespace DynamicSample
                         {
                             if (duplicatedOutput.TryAcquireNextFrame(10, out OutputDuplicateFrameInformation _,
                                     out screenResource) != Result.Ok)
+                            {
+                                Logger.WriteLog(() => $@"{nameof(TakeScreenshot)}1: Возвращаю изображение ({bmp.Width}, {bmp.Height}).", Logger.LogLevel.DEBUG, true);
                                 return bmp;
+                            }
 
                             using (Texture2D screenTexture2D = screenResource.QueryInterface<Texture2D>())
                                 device.ImmediateContext.CopyResource(screenTexture2D, screenTexture);
@@ -290,12 +315,15 @@ namespace DynamicSample
                             screenResource?.Dispose();
                         }
 
+                        Logger.WriteLog(() => $@"{nameof(TakeScreenshot)}2: Возвращаю изображение ({bmp.Width}, {bmp.Height}).", Logger.LogLevel.DEBUG, true);
+
                         return bmp;
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.WriteLog(() => $@"{nameof(TakeScreenshot)}3: {ex.Message}", Logger.LogLevel.ERROR);
                 return null;
             }
         }
@@ -319,8 +347,28 @@ namespace DynamicSample
                     {
                         try
                         {
-                            if (!StopGameBotThread())
-                                SafeExecute(Application.Exit, true);
+                            if (StopGameBotThread())
+                            {
+                                Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Игра (бот) остановлена клавишей ESC.", Logger.LogLevel.ERROR);
+                                return;
+                            }
+
+                            SafeExecute(() =>
+                            {
+                                try
+                                {
+                                    Application.Exit();
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: {nameof(Application.Exit)}: {ex.Message}", Logger.LogLevel.ERROR);
+                                }
+                            }, true);
+                            Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Exited by ESC ({Keys.Escape}).", Logger.LogLevel.DEBUG);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: {ex.Message}", Logger.LogLevel.ERROR);
                         }
                         finally
                         {
@@ -337,13 +385,13 @@ namespace DynamicSample
                     t.Start();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignored
+                Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: {ex.Message}", Logger.LogLevel.ERROR);
             }
         }
 
-        void SaveProfile()
+        void AddProfile()
         {
             for (int k = 0; k < _settingProfiles.Profiles.Count; k++)
             {
@@ -424,10 +472,14 @@ namespace DynamicSample
             {
                 btnGameStart.Enabled = false;
 
+                const string message = @"Отсутствуют обозначения крестиков (X). Создайте новый профиль.";
+
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+
                 if (silent)
                     return false;
 
-                MessageBox.Show(this, @"Отсутствуют обозначения крестиков (X). Создайте новый профиль.");
+                MessageBox.Show(this, message);
                 return false;
             }
 
@@ -435,10 +487,14 @@ namespace DynamicSample
             {
                 btnGameStart.Enabled = false;
 
+                const string message = @"Отсутствуют обозначения ноликов (O). Создайте новый профиль.";
+
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+
                 if (silent)
                     return false;
 
-                MessageBox.Show(this, @"Отсутствуют обозначения ноликов (O). Создайте новый профиль.");
+                MessageBox.Show(this, message);
                 return false;
             }
 
@@ -446,10 +502,14 @@ namespace DynamicSample
             {
                 btnGameStart.Enabled = false;
 
+                const string message = @"Отсутствуют обозначения пустых мест. Создайте новый профиль.";
+
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+
                 if (silent)
                     return false;
 
-                MessageBox.Show(this, @"Отсутствуют обозначения пустых мест. Создайте новый профиль.");
+                MessageBox.Show(this, message);
                 return false;
             }
 
@@ -457,17 +517,26 @@ namespace DynamicSample
             {
                 btnGameStart.Enabled = false;
 
+                string message = $@"Недостаточно обозначений мест ударов. Сейчас их {_selectedProfileSettings.Spaces.Count}, а должно быть 9.";
+
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+
                 if (silent)
                     return false;
 
-                MessageBox.Show(this, $@"Недостаточно обозначений мест ударов. Сейчас их {_selectedProfileSettings.Spaces.Count}, а должно быть 9.");
+                MessageBox.Show(this, message);
                 return false;
             }
 
             if (_selectedProfileSettings.Spaces.Count > 9)
             {
                 btnGameStart.Enabled = false;
-                MessageBox.Show(this, $@"Мест ударов меньше, чем создано. Сейчас их {_selectedProfileSettings.Spaces.Count}, а должно быть 9. Создайте профиль заново.");
+
+                string message = $@"Мест ударов меньше, чем создано. Сейчас их {_selectedProfileSettings.Spaces.Count}, а должно быть 9. Создайте профиль заново.";
+
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+
+                MessageBox.Show(this, message);
                 return false;
             }
 
@@ -476,16 +545,28 @@ namespace DynamicSample
                 if (BuildField() is null)
                 {
                     btnGameStart.Enabled = false;
-                    MessageBox.Show(this, @"Процесс компиляции сборки завершился сбоем.");
+
+                    const string message = @"Процесс компиляции завершился сбоем.";
+
+                    Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+
+                    MessageBox.Show(this, message);
                     return false;
                 }
             }
             catch (Exception ex)
             {
                 btnGameStart.Enabled = false;
-                MessageBox.Show(this, $@"Процесс компиляции сборки завершился сбоем.{Environment.NewLine}Текст ошибки: {ex.Message}.");
+
+                string message = $@"Процесс компиляции сборки завершился сбоем.{Environment.NewLine}Текст ошибки: {ex.Message}.";
+
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+
+                MessageBox.Show(this, message);
                 return false;
             }
+
+            Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: Успех. silent = {silent}.");
 
             btnGameStart.Enabled = true;
 
@@ -494,6 +575,8 @@ namespace DynamicSample
 
         void BtnSavePosition_Click(object sender, EventArgs e)
         {
+            Logger.WriteLog(() => $@"{nameof(BtnSavePosition_Click)}: Сохранение элемента карты...");
+
             Rectangle gfr = GameFieldRect;
 
             if (radNeedClick.Checked)
@@ -508,6 +591,9 @@ namespace DynamicSample
 
                 _selectedProfileSettings.EventClicks.Add(bi);
                 _needSaveProfile = true;
+
+                Logger.WriteLog(() => $@"{nameof(BtnSavePosition_Click)}: Действие добавлено:{Environment.NewLine}{bi}.");
+
                 return;
             }
 
@@ -525,6 +611,9 @@ namespace DynamicSample
 
                     _selectedProfileSettings.Spaces.Add(bi);
                     _needSaveProfile = true;
+
+                    Logger.WriteLog(() => $@"{nameof(BtnSavePosition_Click)}: Объект свободного поля добавлен:{Environment.NewLine}{bi}.");
+
                     return;
                 }
 
@@ -540,6 +629,9 @@ namespace DynamicSample
 
                     _selectedProfileSettings.Spaces.Add(bi);
                     _needSaveProfile = true;
+
+                    Logger.WriteLog(() => $@"{nameof(BtnSavePosition_Click)}: Объект X добавлен:{Environment.NewLine}{bi}.");
+
                     return;
                 }
 
@@ -556,6 +648,8 @@ namespace DynamicSample
 
                 _selectedProfileSettings.Spaces.Add(bi1);
                 _needSaveProfile = true;
+
+                Logger.WriteLog(() => $@"{nameof(BtnSavePosition_Click)}: Объект O добавлен:{Environment.NewLine}{bi1}.");
             }
             finally
             {
@@ -565,6 +659,8 @@ namespace DynamicSample
 
         static Bitmap GetBitmapPiece(Rectangle rect, Bitmap where)
         {
+            Logger.WriteLog(() => $@"{nameof(GetBitmapPiece)}: {nameof(rect.X)} = {rect.X}, {nameof(rect.Y)} = {rect.Y}; {nameof(rect.Width)} = {rect.Width}, {nameof(rect.Height)} = {rect.Height}{Environment.NewLine}{nameof(where)} = ({where.Width}, {where.Height}).", Logger.LogLevel.DEBUG);
+
             Bitmap result = new Bitmap(rect.Width, rect.Height);
 
             for (int y = 0, ly = rect.Y; y < rect.Height; y++, ly++)
@@ -577,63 +673,82 @@ namespace DynamicSample
         void GameHandler(int[,] sessionCopy, ref GameSession gameSession, Dictionary<Size, (BitImages, ProcessorHandler)> pcs, HitCounter hc)
         {
             if (sessionCopy is null)
+            {
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(sessionCopy)} is null.", Logger.LogLevel.ERROR);
                 return;
+            }
 
             if (gameSession is null)
             {
                 gameSession = new GameSession();
                 GameSession.IsGameCompetitorsInverted = false;
+
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(gameSession)} is null.", Logger.LogLevel.DEBUG);
             }
 
             GameSession.FieldState fs = GameSession.GetCurrentState(sessionCopy);
+
+            Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(fs)} = {fs}.", Logger.LogLevel.DEBUG);
 
             if (gameSession.HitX < 0 || gameSession.HitY < 0)
             {
                 switch (fs)
                 {
                     case GameSession.FieldState.EMPTY:
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается с пустого поля.", Logger.LogLevel.DEBUG);
                         gameSession = new GameSession(sessionCopy);
                         DoFirstHit(gameSession);
                         GameSession.IsGameCompetitorsInverted = false;
                         return;
                     case GameSession.FieldState.FULL:
-                        DoClickOperations(pcs);
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра завершилась полностью заполненным полем.", Logger.LogLevel.DEBUG);
+                        DoClickActions(pcs);
                         GameSession.IsGameCompetitorsInverted = false;
                         return;
                     case GameSession.FieldState.WAITHIT:
                         {
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Ожидается мой удар...", Logger.LogLevel.DEBUG);
                             (int hit, Point hitPoint) = GetAloneHit(sessionCopy);
+
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(hit)} = {hit}; {nameof(hitPoint)} = ({hitPoint.X}, {hitPoint.Y}).", Logger.LogLevel.DEBUG);
 
                             switch (hit)
                             {
                                 case GameSession.EmptyHit:
+                                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается... Неизвестно, какими я играю... Бью на удачу!", Logger.LogLevel.DEBUG);
                                     DoUnknownHit(gameSession);
                                     GameSession.IsGameCompetitorsInverted = false;
                                     return;
                                 case GameSession.UserHit:
+                                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается... Вижу свой удар, хожу крестиками (X).", Logger.LogLevel.DEBUG);
                                     DoGameHit(gameSession, hitPoint);
                                     GameSession.IsGameCompetitorsInverted = false;
                                     return;
                                 case GameSession.BotHit:
+                                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается... Вижу удар пользователя, хожу ноликами (O).", Logger.LogLevel.DEBUG);
                                     GameSession.IsGameCompetitorsInverted = true;
                                     DoGameHit(gameSession, hitPoint);
                                     return;
                                 default:
-                                    throw new Exception($@"Что-то пошло не так, удар ({hit}).");
+                                    throw new Exception($@"Игра начинается... Что-то пошло не так, удар ({hit}).");
                             }
                         }
                     default:
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(GameSession.FieldState)} is unknown.", Logger.LogLevel.ERROR);
                         throw new ArgumentOutOfRangeException();
                 }
             }
 
             if (fs == GameSession.FieldState.EMPTY)
             {
-                if (DoClickOperations(pcs))
+                if (DoClickActions(pcs))
                 {
+                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Оказалось, что надо было сделать действие.", Logger.LogLevel.DEBUG);
                     GameSession.IsGameCompetitorsInverted = false;
                     return;
                 }
+
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Вижу, что поле пустое, и наношу первый удар.", Logger.LogLevel.DEBUG);
 
                 gameSession.FixGameStep();
                 gameSession = new GameSession(sessionCopy);
@@ -646,6 +761,7 @@ namespace DynamicSample
             switch (sessionCopy[gameSession.HitX, gameSession.HitY])
             {
                 case GameSession.UserHit:
+                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Вижу, что я играю крестиками (X).", Logger.LogLevel.DEBUG);
                     GameSession.IsGameCompetitorsInverted = true;
                     return;
             }
@@ -664,8 +780,9 @@ namespace DynamicSample
 
                     if (m1 != GameSession.EmptyHit && m2 != GameSession.EmptyHit)
                     {
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: При поиске изменений на игровом поле, была найдена ошибка ({m1}, {m2}).", Logger.LogLevel.DEBUG);
                         gameSession = new GameSession(sessionCopy);
-                        DoClickOperations(pcs);
+                        DoClickActions(pcs);
                         GameSession.IsGameCompetitorsInverted = false;
                         return;
                     }
@@ -673,13 +790,23 @@ namespace DynamicSample
                     if (m1 == GameSession.EmptyHit && m2 != GameSession.EmptyHit)
                     {
                         if (x == gameSession.HitX && y == gameSession.HitY)
-                            continue;
-
-                        if (DoClickOperations(pcs))
                         {
+                            int x1 = x;
+                            int y1 = y;
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Вижу свой последний удар ({x1}, {y1}), который, видимо, не успел отобразиться...", Logger.LogLevel.DEBUG);
+                            continue;
+                        }
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Странная ситуация - найден какое-то поле, которое должно быть пустое, но это не так ({m2}).", Logger.LogLevel.DEBUG);
+
+                        if (DoClickActions(pcs))
+                        {
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) совершено.", Logger.LogLevel.DEBUG);
                             GameSession.IsGameCompetitorsInverted = false;
                             return;
                         }
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) не требуется, попробую сходить ""на удачу"".", Logger.LogLevel.DEBUG);
 
                         gameSession = new GameSession(sessionCopy);
                         DoUnknownHit(gameSession);
@@ -689,26 +816,44 @@ namespace DynamicSample
 
                     hp = new Point(x, y);
                     ++diffCount;
+
+                    Point hp1 = hp;
+                    int dc = diffCount;
+                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Найдена точка удара соперника ({hp1.X}, {hp1.Y}). Количество найденных изменений {dc}.", Logger.LogLevel.DEBUG);
                 }
 
             if (diffCount < 1)
             {
-                if (DoClickOperations(pcs))
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Количество отличий должно быть равно одному, а не ({diffCount}).", Logger.LogLevel.DEBUG);
+
+                if (DoClickActions(pcs))
+                {
+                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) совершено.", Logger.LogLevel.DEBUG);
                     GameSession.IsGameCompetitorsInverted = false;
+                    return;
+                }
+
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) не требуется.", Logger.LogLevel.DEBUG);
+
                 return;
             }
 
             if (diffCount == 1)
             {
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Ход соперника определён ({hp.X}, {hp.Y}). Наношу удар.", Logger.LogLevel.DEBUG);
+
                 DoGameHit(gameSession, hp);
                 return;
             }
 
-            if (DoClickOperations(pcs))
+            if (DoClickActions(pcs))
             {
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Не удалось определить ход соперника. Действие (клик) совершено. Количество отличий ({diffCount}).", Logger.LogLevel.DEBUG);
                 GameSession.IsGameCompetitorsInverted = false;
                 return;
             }
+
+            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Не удалось определить ход соперника. Действие (клик) не требуется. Количество отличий ({diffCount}).", Logger.LogLevel.DEBUG);
 
             gameSession = new GameSession(sessionCopy);
             DoUnknownHit(gameSession);
@@ -745,7 +890,7 @@ namespace DynamicSample
                 (int x, int y) = gs.MakeHitDecision();
 
                 if (!gs.MakeBotHit(x, y))
-                    throw new Exception($@"Странное решение ({x}, {y}).");
+                    throw new Exception($@"{nameof(DoUnknownHit)}: Странное решение ({x}, {y}).");
 
                 DoPhysicalHit(x, y);
             }
@@ -753,7 +898,9 @@ namespace DynamicSample
             void DoFirstHit(GameSession gs)
             {
                 hc.Inc();
-                gs.MakeBotHit(hc.Counter % 3, hc.Counter / 3);
+                int x = hc.Counter % 3, y = hc.Counter / 3;
+                if (!gs.MakeBotHit(x, y))
+                    throw new Exception($@"{nameof(DoFirstHit)}: Странное решение ({x}, {y}).");
                 DoPhysicalHit(gs.HitX, gs.HitY);
             }
 
@@ -761,7 +908,7 @@ namespace DynamicSample
             {
                 if (!gs.MakeUserHit(hitPoint.X, hitPoint.Y))
                     throw new Exception(
-                        $@"Что-то пошло не так ({hitPoint.X}, {hitPoint.Y}).");
+                        $@"{nameof(DoGameHit)}: Что-то пошло не так ({hitPoint.X}, {hitPoint.Y}).");
 
                 if (gs.CurrentWinner != GameSession.Winner.NOBODY)
                     return;
@@ -769,33 +916,67 @@ namespace DynamicSample
                 (int x, int y) = gs.MakeHitDecision();
 
                 if (!gs.MakeBotHit(x, y))
-                    throw new Exception($@"Странное решение ({x}, {y}).");
+                    throw new Exception($@"{nameof(DoGameHit)}: Странное решение ({x}, {y}).");
 
                 DoPhysicalHit(x, y);
             }
         }
 
-        ProcessorContainer ProcessorContainerFromSettings => new ProcessorContainer(_selectedProfileSettings.Spaces.Select((bi, bx) => new Processor(bi.AsBitmap, $@"{bi.Name}{bx}")).ToArray());
+        ProcessorContainer ProcessorContainerFromSettings => new ProcessorContainer(_selectedProfileSettings.Spaces.Select((bi, bx) =>
+        {
+            Processor p = new Processor(bi.AsBitmap, $@"{bi.Name}{bx}");
+
+            Logger.WriteLog(() => $@"{nameof(ProcessorContainerFromSettings)}: Искомый элемент игрового поля создан ({p.Tag}: {p.Width}, {p.Height}).", Logger.LogLevel.DEBUG);
+
+            return p;
+        }).ToArray());
 
         int[,] BuildField(ProcessorContainer req = null)
         {
             Bitmap fullFrameNow = TakeScreenshot();
 
             if (fullFrameNow is null)
+            {
+                Logger.WriteLog(() => $@"{nameof(BuildField)}: Ошибка при построении игрового поля.", Logger.LogLevel.ERROR);
                 return null;
+            }
 
             while (true)
             {
                 IEnumerable<Processor> pq1 = _selectedProfileSettings.Spaces.Select(bi =>
-                    new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z"));
+                {
+                    Logger.WriteLog(() => $@"{nameof(BuildField)}: Область поиска игровой сетки:{Environment.NewLine}1) Общий размер поля: {fullFrameNow.Width} x {fullFrameNow.Height}{Environment.NewLine}2) Необходимо извлечь фрагмент: X: {bi.Coords.X}, Y: {bi.Coords.Y}; W: {bi.FieldSize.Width}, H: {bi.FieldSize.Height}.", Logger.LogLevel.DEBUG, true);
+
+                    Processor p = new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z");
+
+                    Logger.WriteLog(() => $@"{nameof(BuildField)}: Создана исследуемая карта ({p.Tag}: {p.Width}, {p.Height}).", Logger.LogLevel.DEBUG, true);
+
+                    return p;
+                });
 
                 if (req is null)
                     req = ProcessorContainerFromSettings;
 
+                Logger.WriteLog(() =>
+                {
+                    StringBuilder r = new StringBuilder($@"{nameof(BuildField)}: Поисковый запрос выглядит следующим образом:");
+
+                    for (int k = 0; k < req.Count; k++)
+                    {
+                        r.AppendLine();
+                        Processor p = req[k];
+                        r.Append($@"{k + 1}) {p.Tag} ({p.Width}, {p.Height})");
+                    }
+
+                    r.Append('.');
+
+                    return r.ToString();
+                }, Logger.LogLevel.DEBUG, true);
+
                 List<SearchResults> results = new List<SearchResults>(pq1.Select(p => p.GetEqual(req)));
 
                 if (results.Count != 9)
-                    throw new InvalidOperationException($@"{nameof(results)} не равно 9: {results.Count}");
+                    throw new InvalidOperationException($@"{nameof(BuildField)}: {nameof(results)} не равно 9: {results.Count}");
 
                 int[,] sessionCopy = new int[3, 3];
 
@@ -813,7 +994,7 @@ namespace DynamicSample
                             char c = pps[kp].Tag[0];
                             if (rTag != c && c != 'E')
                                 throw new ArgumentException(
-                                    $@"Неоднозначность ({pps.Length}) => ({pps[0].Tag} <==> {pps[kp].Tag}), клетка номер {k} (с нуля).");
+                                    $@"{nameof(BuildField)}: Неоднозначность ({pps.Length}) => ({pps[0].Tag} <==> {pps[kp].Tag}), клетка номер {k} (с нуля).");
                             continue;
                         }
 
@@ -838,9 +1019,11 @@ namespace DynamicSample
                             break;
 
                         default:
-                            throw new Exception();
+                            throw new Exception($@"{nameof(BuildField)}: ");
                     }
                 }
+
+                Logger.WriteLog(() => $@"{nameof(BuildField)}: Игровое поле собрано ->{Environment.NewLine}{GameSession.ArrayVisualize(sessionCopy)}.", Logger.LogLevel.DEBUG);
 
                 return sessionCopy;
             }
@@ -848,6 +1031,8 @@ namespace DynamicSample
 
         void DoPhysicalHit(int x, int y)
         {
+            Logger.WriteLog(() => $@"{nameof(DoPhysicalHit)}: {nameof(x)} = {x}, {nameof(y)} = {y}.", Logger.LogLevel.DEBUG);
+
             BitImages bi = _selectedProfileSettings.Spaces[y * 3 + x];
             int px = bi.Coords.X + bi.FieldSize.Width / 2;
             int py = bi.Coords.Y + bi.FieldSize.Height / 2;
@@ -857,15 +1042,30 @@ namespace DynamicSample
 
         static Point GetPhysicalCoords(int x, int y)
         {
+            Logger.WriteLog(() => $@"{nameof(GetPhysicalCoords)}: {nameof(x)} = {x}, {nameof(y)} = {y}.", Logger.LogLevel.DEBUG);
+
             Screen screen = Screen.FromPoint(new Point(x, y));
 
             int cX = screen.Bounds.Width;
             int cY = screen.Bounds.Height;
 
+            Logger.WriteLog(() => $@"{nameof(GetPhysicalCoords)}: {nameof(cX)} = {cX}, {nameof(cY)} = {cY}.", Logger.LogLevel.DEBUG);
+
             int pX = GetAbsoluteCoordinate(x, cX);
             int pY = GetAbsoluteCoordinate(y, cY);
 
-            return new Point(screen.Bounds.Left + pX, screen.Bounds.Top + pY);
+            Logger.WriteLog(() => $@"{nameof(GetPhysicalCoords)}: {nameof(pX)} = {pX}, {nameof(pY)} = {pY}.", Logger.LogLevel.DEBUG);
+
+            int sbX = screen.Bounds.Left;
+            int sbY = screen.Bounds.Top;
+
+            Logger.WriteLog(() => $@"{nameof(GetPhysicalCoords)}: {nameof(sbX)} = {sbX}, {nameof(sbY)} = {sbY}.", Logger.LogLevel.DEBUG);
+
+            Point p = new Point(sbX + pX, sbY + pY);
+
+            Logger.WriteLog(() => $@"{nameof(GetPhysicalCoords)}: Возвращаю значение ({p.X}, {p.Y}).", Logger.LogLevel.DEBUG);
+
+            return p;
 
             int GetAbsoluteCoordinate(int pixelCoordinate, int screenResolution) => pixelCoordinate * 65536 / screenResolution + 1;
         }
@@ -874,13 +1074,17 @@ namespace DynamicSample
         {
             try
             {
-                Dictionary<Size, (BitImages, ProcessorHandler)> pcs = EventClickHandlers;
+                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)} Запуск бота...");
+
+                Dictionary<Size, (BitImages, ProcessorHandler)> pcs = GetEventClickHandlers();
                 ProcessorContainer req = ProcessorContainerFromSettings;
                 HitCounter hc = _selectedProfileSettings.StartHitCounter;
 
-                DoClickOperations(pcs);
+                DoClickActions(pcs);
 
                 GameSession gameSession = null;
+
+                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)} Бот запущен.");
 
                 while (true)
                 {
@@ -888,86 +1092,153 @@ namespace DynamicSample
 
                     GameHandler(sessionCopy, ref gameSession, pcs, hc);
 
-                    if (sessionCopy is null && !DoClickOperations(pcs))
-                        break;
+                    if (!(sessionCopy is null) || DoClickActions(pcs))
+                        continue;
+
+                    Logger.WriteLog(() => $@"{nameof(GameThreadFunction)} Не могу обработать ситуацию.", Logger.LogLevel.ERROR);
+                    break;
                 }
             }
-            catch (ThreadAbortException)
+            catch (ThreadAbortException ex)
             {
                 ResetAbort();
+                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Бот останавливается. ({ex.Message})");
             }
             catch (Exception ex)
             {
+                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: {ex.Message}", Logger.LogLevel.ERROR);
                 SafeExecute(() => MessageBox.Show(this, ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error), true);
             }
             finally
             {
-                GameBotThread = null;
-
-                if (!ProgramStopFlag)
+                try
                 {
-                    BeginInvoke(new Action(() => SafeExecute(() =>
-                    {
-                        if (ProgramStopFlag)
-                            return;
+                    GameBotThread = null;
 
-                        radNeedClick.Enabled = true;
-                        radEmptySpace.Enabled = true;
-                        radField_X.Enabled = true;
-                        radField_O.Enabled = true;
-                        btnSavePosition.Enabled = true;
-                        btnGameStart.Text = _btnStartCaption;
-                    })));
+                    if (!ProgramStopFlag)
+                    {
+                        BeginInvoke(new Action(() => SafeExecute(() =>
+                        {
+                            try
+                            {
+                                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: ProgramStopFlag = {ProgramStopFlag}",
+                                    Logger.LogLevel.DEBUG);
+
+                                if (ProgramStopFlag)
+                                    return;
+
+                                radNeedClick.Enabled = true;
+                                radEmptySpace.Enabled = true;
+                                radField_X.Enabled = true;
+                                radField_O.Enabled = true;
+                                btnSavePosition.Enabled = true;
+                                btnGameStart.Text = _btnStartCaption;
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: {ex.Message}", Logger.LogLevel.ERROR);
+                                throw;
+                            }
+                        })));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: {ex.Message}", Logger.LogLevel.ERROR);
+                    throw;
+                }
+                finally
+                {
+                    Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Бот остановлен.");
                 }
             }
         }
 
-        bool DoClickOperations(IDictionary<Size, (BitImages, ProcessorHandler)> ps)
+        bool DoClickActions(IDictionary<Size, (BitImages, ProcessorHandler)> ps)
         {
             if (ps is null)
+            {
+                Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Контейнер равен null.", Logger.LogLevel.ERROR);
                 return false;
+            }
 
             Bitmap fullFrameNow = TakeScreenshot();
 
             if (fullFrameNow is null)
+            {
+                Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Не могу получить снимок экрана.", Logger.LogLevel.ERROR);
                 return false;
+            }
 
             foreach (BitImages bi in _selectedProfileSettings.EventClicks)
             {
-                Processor pq = new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z");
-                SearchResults sr = pq.GetEqual(new ProcessorContainer(ps[bi.FieldSize].Item2.Processors.ToArray()));
+                Point pcs = bi.Coords;
+                Size psz = bi.FieldSize;
+
+                Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Проверяю необходимость совершения действия ({pcs.X}, {pcs.Y}; {psz.Width}, {psz.Height}).", Logger.LogLevel.DEBUG);
+
+                Processor pq = new Processor(GetBitmapPiece(new Rectangle(pcs, psz), fullFrameNow), @"Z");
+
+                Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Изображение преобразовано в карту ({pq.Tag}: {pq.Width}, {pq.Height}).", Logger.LogLevel.DEBUG);
+
+                SearchResults sr = pq.GetEqual(new ProcessorContainer(ps[psz].Item2.Processors.ToArray()));
 
                 if (sr[0, 0].Procs.All(p => p.Tag[0] != 'Z'))
+                {
+                    Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Карта Z отсутствует. Продолжаю поиск требуемого действия.", Logger.LogLevel.DEBUG);
                     continue;
+                }
 
+                Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Попытка совершить клик, координаты на экране: {bi.HitX}, {bi.HitY}.", Logger.LogLevel.DEBUG);
                 MouseClickMethods.Click(GetPhysicalCoords(bi.HitX, bi.HitY));
+                Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Действие совершено.", Logger.LogLevel.DEBUG);
 
                 return true;
             }
 
+            Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Какие-либо действия выполнять не требуется.", Logger.LogLevel.DEBUG);
             return false;
         }
 
-        Dictionary<Size, (BitImages, ProcessorHandler)> EventClickHandlers
+        Dictionary<Size, (BitImages, ProcessorHandler)> GetEventClickHandlers()
         {
-            get
+            try
             {
-                Dictionary<Size, (BitImages, ProcessorHandler)> phs = new Dictionary<Size, (BitImages, ProcessorHandler)>();
+                Logger.WriteLog(() => $@"{nameof(GetEventClickHandlers)}: Настройка фильтров для определения необходимости выполнения действий (кликов).", Logger.LogLevel.DEBUG);
+
+                Dictionary<Size, (BitImages, ProcessorHandler)> phs =
+                    new Dictionary<Size, (BitImages, ProcessorHandler)>();
 
                 foreach (BitImages ec in _selectedProfileSettings.EventClicks)
                 {
-                    if (phs.TryGetValue(ec.FieldSize, out (BitImages, ProcessorHandler) phh))
+                    Size sz = ec.FieldSize;
+                    if (phs.TryGetValue(sz, out (BitImages, ProcessorHandler) phh))
                     {
-                        phh.Item2.Add(ec.AsProcessor);
+                        Logger.WriteLog(() => $@"{nameof(GetEventClickHandlers)}: Фильтр этого размера ({sz.Width}; {sz.Height}) отсутствует в списке, добавляю...", Logger.LogLevel.DEBUG);
+                        Processor p = ec.AsProcessor;
+                        phh.Item2.Add(p);
+                        Logger.WriteLog(() => $@"{nameof(GetEventClickHandlers)}: Фильтр ({sz.Width}; {sz.Height}) -> {p.Tag}: ({p.Width}; {p.Height}) добавлен.", Logger.LogLevel.DEBUG);
                         continue;
                     }
 
+                    Logger.WriteLog(() => $@"{nameof(GetEventClickHandlers)}: Фильтр этого размера ({sz.Width}; {sz.Height}) присутствует в списке, добавляю ему пару...", Logger.LogLevel.DEBUG);
+
                     ProcessorHandler ph = new ProcessorHandler();
-                    ph.Add(ec.AsProcessor);
-                    phs.Add(ec.FieldSize, (ec, ph));
+                    Processor p1 = ec.AsProcessor;
+                    ph.Add(p1);
+                    phs.Add(sz, (ec, ph));
+
+                    Logger.WriteLog(() => $@"{nameof(GetEventClickHandlers)}: Фильтр ({sz.Width}; {sz.Height}) -> {p1.Tag}: ({p1.Width}; {p1.Height}) добавлен.", Logger.LogLevel.DEBUG);
                 }
 
+                Logger.WriteLog(() => $@"{nameof(GetEventClickHandlers)}: Фильтры мониторинга необходимых действий настроены (количество {phs.Count}).", Logger.LogLevel.DEBUG);
+
                 return phs;
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(() => $@"{nameof(GetEventClickHandlers)}: Неизвестная ошибка: {ex.Message}.", Logger.LogLevel.ERROR);
+                throw;
             }
         }
 
@@ -976,26 +1247,43 @@ namespace DynamicSample
             Thread rt = GameBotThread;
 
             if (rt is null)
+            {
+                Logger.WriteLog(() => $@"{nameof(StopGameBotThread)}: Бот неактивен.", Logger.LogLevel.DEBUG);
                 return false;
+            }
 
             rt.Abort();
             rt.Join();
 
+            Logger.WriteLog(() => $@"{nameof(StopGameBotThread)}: Рабочий поток бота завершён.", Logger.LogLevel.DEBUG);
+
             GameBotThread = null;
 
             if (ProgramStopFlag)
+            {
+                Logger.WriteLog(() => $@"{nameof(StopGameBotThread)}: Программа в процессе завершения.", Logger.LogLevel.DEBUG);
                 return true;
+            }
 
             SafeExecute(() =>
             {
-                radNeedClick.Enabled = true;
-                radEmptySpace.Enabled = true;
-                radField_X.Enabled = true;
-                radField_O.Enabled = true;
-                btnSavePosition.Enabled = true;
-                btnGameStart.Text = _btnStartCaption;
+                try
+                {
+                    radNeedClick.Enabled = true;
+                    radEmptySpace.Enabled = true;
+                    radField_X.Enabled = true;
+                    radField_O.Enabled = true;
+                    btnSavePosition.Enabled = true;
+                    btnGameStart.Text = _btnStartCaption;
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteLog(() => $@"{nameof(StopGameBotThread)}: Ошибка интерфейса пользователя: {ex.Message}.", Logger.LogLevel.ERROR);
+                    throw;
+                }
             }, true);
 
+            Logger.WriteLog(() => $@"{nameof(StopGameBotThread)}: Работа бота завершена.", Logger.LogLevel.DEBUG);
             return true;
         }
 
@@ -1003,59 +1291,85 @@ namespace DynamicSample
         {
             SafeExecute(() =>
             {
-                if (StopGameBotThread())
-                    return;
-
-                if (!UpdateProfileStatus(false))
-                    return;
-
-                if (_needSaveProfile)
+                try
                 {
-                    string profileName = _selectedProfileSettings.ProfileName;
-
-                    using (FrmName fn = new FrmName())
+                    if (StopGameBotThread())
                     {
-                        fn.MyTxtName = profileName;
-                        if (fn.ShowDialog(this) == DialogResult.OK)
-                            profileName = fn.MyTxtName;
+                        Logger.WriteLog(() => $@"{nameof(BtnGameStart_Click)}: Работа бота прервана.", Logger.LogLevel.DEBUG);
+                        return;
                     }
 
-                    if (string.IsNullOrEmpty(profileName))
-                        profileName = cbxProfiles.Items.Count.ToString();
-
-                    _selectedProfileSettings.ProfileName = profileName;
-                    Bitmap screenshot = TakeScreenshot();
-
-                    if (!(screenshot is null))
+                    if (!UpdateProfileStatus(false))
                     {
-                        _selectedProfileSettings.EventClicks.AddRange(
-                            _selectedProfileSettings.EventClicks.Select(ec =>
-                                (ec, GetBitmapPiece(ec.AsRectangle, screenshot))).Select(bt => new BitImages(bt.ec)
-                                {
-                                    Data = GetBitmapAsInts(bt.Item2),
-                                    Name = 'E'
-                                }).ToArray());
+                        Logger.WriteLog(() => $@"{nameof(BtnGameStart_Click)}: Ошибка при проверке профиля настроек бота.",
+                            Logger.LogLevel.DEBUG);
+                        return;
                     }
 
-                    SaveProfile();
+                    if (_needSaveProfile)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(BtnGameStart_Click)}: Создание рабочей сборки для бота...",
+                            Logger.LogLevel.DEBUG);
+
+                        string profileName = _selectedProfileSettings.ProfileName;
+
+                        using (FrmName fn = new FrmName())
+                        {
+                            fn.MyTxtName = profileName;
+                            if (fn.ShowDialog(this) == DialogResult.OK)
+                            {
+                                profileName = fn.MyTxtName;
+                                string pn = profileName;
+                                Logger.WriteLog(() =>
+                                    $@"{nameof(BtnGameStart_Click)}: Профиль в процессе добавления: {pn}.");
+                            }
+                        }
+
+                        if (string.IsNullOrEmpty(profileName))
+                            profileName = cbxProfiles.Items.Count.ToString();
+
+                        _selectedProfileSettings.ProfileName = profileName;
+                        Bitmap screenshot = TakeScreenshot();
+
+                        if (!(screenshot is null))
+                        {
+                            _selectedProfileSettings.EventClicks.AddRange(
+                                _selectedProfileSettings.EventClicks.Select(ec =>
+                                    (ec, GetBitmapPiece(ec.AsRectangle, screenshot))).Select(bt => new BitImages(bt.ec)
+                                    {
+                                        Data = GetBitmapAsInts(bt.Item2),
+                                        Name = 'E'
+                                    }).ToArray());
+                        }
+
+                        AddProfile();
+                        Logger.WriteLog(() => $@"{nameof(BtnGameStart_Click)}: Профиль добавлен: {profileName}.");
+                    }
+
+                    radNeedClick.Enabled = false;
+                    radEmptySpace.Enabled = false;
+                    radField_X.Enabled = false;
+                    radField_O.Enabled = false;
+                    btnSavePosition.Enabled = false;
+                    btnGameStart.Text = @"Стоп";
+
+                    Thread t = new Thread(GameThreadFunction)
+                    {
+                        IsBackground = true,
+                        Name = @"GameThread"
+                    };
+
+                    t.Start();
+
+                    GameBotThread = t;
+
+                    Logger.WriteLog(() => $@"{nameof(BtnGameStart_Click)}: Бот запущен.");
                 }
-
-                radNeedClick.Enabled = false;
-                radEmptySpace.Enabled = false;
-                radField_X.Enabled = false;
-                radField_O.Enabled = false;
-                btnSavePosition.Enabled = false;
-                btnGameStart.Text = @"Стоп";
-
-                Thread t = new Thread(GameThreadFunction)
+                catch (Exception ex)
                 {
-                    IsBackground = true,
-                    Name = @"GameThread"
-                };
-
-                t.Start();
-
-                GameBotThread = t;
+                    Logger.WriteLog(() => $@"{nameof(BtnGameStart_Click)}: Ошибка: {ex.Message}.", Logger.LogLevel.ERROR);
+                    throw;
+                }
             });
         }
 

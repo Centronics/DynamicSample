@@ -23,33 +23,55 @@ namespace DynamicSample
         {
             try
             {
+                Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Клик на форме.", Logger.LogLevel.DEBUG);
+
                 int pbDrawCw = pbDraw.Width / 3;
                 int pbDrawCh = pbDraw.Height / 3;
 
                 if (!_gameSession.MakeUserHit(e.X / pbDrawCw, e.Y / pbDrawCh))
+                {
+                    Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Клик пользователя ({e.X}, {e.Y}) неудачен.", Logger.LogLevel.DEBUG);
                     return;
+                }
+
+                Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Клик пользователя ({e.X}, {e.Y}) успешен.", Logger.LogLevel.DEBUG);
 
                 RefreshGameField();
 
                 if (_gameSession.CurrentWinner == GameSession.Winner.NOBODY)
                 {
-                    _gameSession.MakeHitDecision();
-                    RefreshGameField();
+                    (int x, int y) = _gameSession.MakeHitDecision();
+
+                    Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Удар бота ({x}, {y}).", Logger.LogLevel.DEBUG);
+
+                    if (_gameSession.MakeBotHit(x, y))
+                        RefreshGameField();
+                    else
+                    {
+                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Неожиданная ошибка: Ничья, никто не сможет выиграть! Удар бота ({x}, {y}).", Logger.LogLevel.DEBUG);
+                        MessageBox.Show($@"Неожиданная ошибка: Ничья, никто не сможет выиграть!{Environment.NewLine}Удар бота ({x}, {y}).");
+                        RefreshGameField(true);
+                        return;
+                    }
                 }
 
                 switch (_gameSession.CurrentWinner)
                 {
                     case GameSession.Winner.NOBODY:
+                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Никто не выиграл. Игра продолжается.", Logger.LogLevel.DEBUG);
                         return;
                     case GameSession.Winner.STANDOFF:
+                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Ничья!", Logger.LogLevel.DEBUG);
                         MessageBox.Show(@"Ничья!");
                         RefreshGameField(true);
                         return;
                     case GameSession.Winner.USER:
+                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Ты выиграл!", Logger.LogLevel.DEBUG);
                         MessageBox.Show(@"Ты выиграл!");
                         RefreshGameField(true);
                         return;
                     case GameSession.Winner.BOT:
+                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Компьютер выиграл!", Logger.LogLevel.DEBUG);
                         MessageBox.Show(@"Компьютер выиграл!");
                         RefreshGameField(true);
                         return;
@@ -59,6 +81,7 @@ namespace DynamicSample
             }
             catch (Exception ex)
             {
+                Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: {ex.Message}", Logger.LogLevel.ERROR);
                 MessageBox.Show(ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Application.Exit();
             }
@@ -66,27 +89,55 @@ namespace DynamicSample
 
         void FrmSample_Shown(object sender, EventArgs e)
         {
-            pbDraw.Image = _gameCanvas = new Bitmap(pbDraw.Width, pbDraw.Height);
-            _gameGrFront = Graphics.FromImage(_gameCanvas);
-            RefreshGameField();
+            try
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmSample_Shown)}: Запуск программы.", Logger.LogLevel.DEBUG);
+
+                pbDraw.Image = _gameCanvas = new Bitmap(pbDraw.Width, pbDraw.Height);
+                _gameGrFront = Graphics.FromImage(_gameCanvas);
+                RefreshGameField();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmSample_Shown)}: {ex.Message}", Logger.LogLevel.ERROR);
+            }
         }
 
         void FrmSample_KeyDown(object sender, KeyEventArgs e)
         {
-            switch (e.KeyCode)
+            try
             {
-                case Keys.Escape:
-                    Application.Exit();
-                    return;
+                Logger.WriteLog(() => $@"{nameof(FrmSample_KeyDown)}: Нажатие клавиши на форме.", Logger.LogLevel.DEBUG);
+
+                switch (e.KeyCode)
+                {
+                    case Keys.Escape:
+                        Logger.WriteLog(() => $@"{nameof(FrmSample_KeyDown)}: Выход из программы с помощью клавиши ESC.");
+                        Application.Exit();
+                        return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmSample_KeyDown)}: {ex.Message}", Logger.LogLevel.ERROR);
             }
         }
 
         void FrmSample_FormClosed(object sender, FormClosedEventArgs e)
         {
-            pbDraw.Image = null;
+            try
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmSample_FormClosed)}: Форма закрыта.", Logger.LogLevel.DEBUG);
 
-            _gameGrFront?.Dispose();
-            _gameCanvas?.Dispose();
+                pbDraw.Image = null;
+
+                _gameGrFront?.Dispose();
+                _gameCanvas?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmSample_FormClosed)}: {ex.Message}", Logger.LogLevel.ERROR);
+            }
         }
 
         void RefreshGameField(bool createNewGame = false)

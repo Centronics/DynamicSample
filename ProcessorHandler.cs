@@ -51,7 +51,7 @@ namespace DynamicSample
         void CheckProcessorSizes(Processor p)
         {
             if (p == null)
-                throw new ArgumentNullException(nameof(p), "Добавляемая карта не может быть равна null.");
+                throw new ArgumentNullException(nameof(p), @"Добавляемая карта не может быть равна null.");
 
             Processor t = Processors.FirstOrDefault();
 
@@ -60,7 +60,7 @@ namespace DynamicSample
 
             if (t.Size != p.Size)
                 throw new ArgumentException(
-                    $"Добавляемая карта отличается по размерам от первой карты, добавленной в коллекцию. Требуется: {t.Width}, {t.Height}. Фактически: {p.Width}, {p.Height}.");
+                    $@"Добавляемая карта отличается по размерам от первой карты, добавленной в коллекцию. Требуется: {t.Width}, {t.Height}. Фактически: {p.Width}, {p.Height}.");
         }
 
         /// <summary>
@@ -175,14 +175,14 @@ namespace DynamicSample
         public static Processor ChangeProcessorTag(Processor processor, string newTag)
         {
             if (processor == null)
-                throw new ArgumentNullException(nameof(processor), $"{nameof(ChangeProcessorTag)}: карта равна null.");
+                throw new ArgumentNullException(nameof(processor), $@"{nameof(ChangeProcessorTag)}: карта равна null.");
 
             if (processor.Tag == newTag)
                 return processor;
 
             if (string.IsNullOrWhiteSpace(newTag))
                 throw new ArgumentException(
-                    $"{nameof(ChangeProcessorTag)}: \"{nameof(newTag)}\" не может быть пустым или содержать только пробел.",
+                    $@"{nameof(ChangeProcessorTag)}: ""{nameof(newTag)}"" не может быть пустым или содержать только пробел.",
                     nameof(newTag));
 
             SignValue[,] sv = new SignValue[processor.Width, processor.Height];

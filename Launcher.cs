@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace DynamicSample
@@ -17,27 +18,38 @@ namespace DynamicSample
         {
             try
             {
-                Logger.Initialize();
-
                 try
                 {
+                    Thread.CurrentThread.Name = @"Main Thread";
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+
                     InvertModeEnabled = GetParameter(IsInvertMode);
                     DebugLogEnabled = GetParameter(IsDebugLog);
                     ExplicitLogEnabled = GetParameter(IsExplicitLog);
 
-                    Application.EnableVisualStyles();
-                    Application.SetCompatibleTextRenderingDefault(false);
+                    Logger.Initialize();
+
+                    string invertModeString =
+                        InvertModeEnabled ? @"Режим инверсии включен." : @"Режим инверсии выключен.";
+                    string debugLogString =
+                        DebugLogEnabled ? @"Режим журналирования включен." : @"Режим журналирования выключен.";
+                    string explicitLogString =
+                        ExplicitLogEnabled ? @"Режим расширенной диагностики включен." : @"Режим расширенной диагностики выключен.";
+
+                    Logger.WriteLog(() => $@"{nameof(Main)}: {invertModeString}");
+                    Logger.WriteLog(() => $@"{nameof(Main)}: {debugLogString}");
+                    Logger.WriteLog(() => $@"{nameof(Main)}: {explicitLogString}");
 
                     if (GetParameter(IsBotMode))
                     {
-                        Logger.WriteLog(@"Игра началась. Режим бота включен...");
+                        Logger.WriteLog(() => $@"{nameof(Main)}: Игра началась. Режим бота включен...");
                         Application.Run(new FrmGameBot());
+                        return;
                     }
-                    else
-                    {
-                        Logger.WriteLog(@"Start game. Bot mode is off...");
-                        Application.Run(new FrmSample());
-                    }
+
+                    Logger.WriteLog(() => $@"{nameof(Main)}: Игра началась. Режим бота выключен...");
+                    Application.Run(new FrmSample());
                 }
                 finally
                 {
