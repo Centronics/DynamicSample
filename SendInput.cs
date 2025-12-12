@@ -714,6 +714,8 @@ namespace DynamicSample
     {
         public static void Click(Point point)
         {
+            Logger.WriteLog(()=> $@"{nameof(Click)}: X = {point.X}, Y = {point.Y}", Logger.LogLevel.DEBUG);
+
             Input[] inputs =
             {
                 new Input
@@ -755,8 +757,11 @@ namespace DynamicSample
                 }
             };
 
-            if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) != (uint)inputs.Length)
-                throw new Exception($@"{nameof(Click)} error = {Marshal.GetLastWin32Error()}");
+            if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) == (uint)inputs.Length)
+                return;
+
+            int err = Marshal.GetLastWin32Error();
+            throw new Exception($@"{nameof(Click)}: error = {err}");
         }
     }
 }

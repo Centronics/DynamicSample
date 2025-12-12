@@ -30,7 +30,7 @@ namespace DynamicSample
             public void WaitForFree()
             {
                 do
-                    Thread.Sleep(200);
+                    Thread.Sleep(WaitForFreeTimeout);
                 while (_usersCount > 0);
             }
         }
@@ -43,7 +43,13 @@ namespace DynamicSample
 
         static volatile int _isStopMode = 1;
 
-        const int WaitingTimeout = 10000;
+        const int LogWaitingTimeout = 10;
+
+        const int WriteWaitingTimeout = 10;
+
+        const int ReadWaitingTimeout = 1;
+
+        const int WaitForFreeTimeout = 200;
 
         [ThreadStatic]
         static string _threadInfo;
@@ -98,7 +104,7 @@ namespace DynamicSample
 
         static IntStorage GetLogStringsQueue()
         {
-            if (!_rwlSync.TryEnterReadLock(1000))
+            if (!_rwlSync.TryEnterReadLock(ReadWaitingTimeout * 1000))
                 throw new Exception();
 
             IntStorage storage;
@@ -121,7 +127,7 @@ namespace DynamicSample
         {
             IntStorage storage = new IntStorage();
 
-            if (!_rwlSync.TryEnterWriteLock(10000))
+            if (!_rwlSync.TryEnterWriteLock(WriteWaitingTimeout * 1000))
                 throw new Exception();
 
             try
@@ -244,7 +250,7 @@ namespace DynamicSample
 
                 while (true)
                 {
-                    int r = WaitHandle.WaitAny(waitHandles, WaitingTimeout);
+                    int r = WaitHandle.WaitAny(waitHandles, LogWaitingTimeout * 1000);
 
                     WriteToDisk();
 
