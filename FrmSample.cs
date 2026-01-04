@@ -23,7 +23,7 @@ namespace DynamicSample
         {
             try
             {
-                Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Клик на форме.", Logger.LogLevel.DEBUG);
+                Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Клик на форме (X = {e.X}, Y = {e.Y}).", Logger.LogLevel.DEBUG);
 
                 int pbDrawCw = pbDraw.Width / 3;
                 int pbDrawCh = pbDraw.Height / 3;
@@ -48,8 +48,9 @@ namespace DynamicSample
                         RefreshGameField();
                     else
                     {
-                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Неожиданная ошибка: Ничья, никто не сможет выиграть! Удар бота ({x}, {y}).", Logger.LogLevel.DEBUG);
-                        MessageBox.Show($@"Неожиданная ошибка: Ничья, никто не сможет выиграть!{Environment.NewLine}Удар бота ({x}, {y}).");
+                        const string s = @"Неожиданная ошибка: Ничья, никто не сможет выиграть!";
+                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: {s} Удар бота ({x}, {y}).", Logger.LogLevel.DEBUG);
+                        MessageBox.Show($@"{s}{Environment.NewLine}Удар бота ({x}, {y}).");
                         RefreshGameField(true);
                         return;
                     }
@@ -61,20 +62,29 @@ namespace DynamicSample
                         Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Никто не выиграл. Игра продолжается.", Logger.LogLevel.DEBUG);
                         return;
                     case GameSession.Winner.STANDOFF:
-                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Ничья!", Logger.LogLevel.DEBUG);
-                        MessageBox.Show(@"Ничья!");
-                        RefreshGameField(true);
-                        return;
+                        {
+                            const string s = @"Ничья!";
+                            Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: {s}", Logger.LogLevel.DEBUG);
+                            MessageBox.Show(s);
+                            RefreshGameField(true);
+                            return;
+                        }
                     case GameSession.Winner.USER:
-                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Ты выиграл!", Logger.LogLevel.DEBUG);
-                        MessageBox.Show(@"Ты выиграл!");
-                        RefreshGameField(true);
-                        return;
+                        {
+                            const string s = @"Ты выиграл!";
+                            Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: {s}", Logger.LogLevel.DEBUG);
+                            MessageBox.Show(s);
+                            RefreshGameField(true);
+                            return;
+                        }
                     case GameSession.Winner.BOT:
-                        Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: Компьютер выиграл!", Logger.LogLevel.DEBUG);
-                        MessageBox.Show(@"Компьютер выиграл!");
-                        RefreshGameField(true);
-                        return;
+                        {
+                            const string s = @"Компьютер выиграл!";
+                            Logger.WriteLog(() => $@"{nameof(PbDraw_MouseClick)}: {s}", Logger.LogLevel.DEBUG);
+                            MessageBox.Show(s);
+                            RefreshGameField(true);
+                            return;
+                        }
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -91,11 +101,13 @@ namespace DynamicSample
         {
             try
             {
-                Logger.WriteLog(() => $@"{nameof(FrmSample_Shown)}: Запуск программы.", Logger.LogLevel.DEBUG);
+                Logger.WriteLog(() => $@"{nameof(FrmSample_Shown)}: Запуск программы в обычном режиме.");
 
                 pbDraw.Image = _gameCanvas = new Bitmap(pbDraw.Width, pbDraw.Height);
                 _gameGrFront = Graphics.FromImage(_gameCanvas);
                 RefreshGameField();
+
+                Logger.WriteLog(() => $@"{nameof(FrmSample_Shown)}: Пользовательский интерфейс готов к работе.", Logger.LogLevel.DEBUG);
             }
             catch (Exception ex)
             {
@@ -107,7 +119,7 @@ namespace DynamicSample
         {
             try
             {
-                Logger.WriteLog(() => $@"{nameof(FrmSample_KeyDown)}: Нажатие клавиши на форме.", Logger.LogLevel.DEBUG);
+                Logger.WriteLog(() => $@"{nameof(FrmSample_KeyDown)}: Нажатие клавиши ({e.KeyCode}) на форме.", Logger.LogLevel.DEBUG);
 
                 switch (e.KeyCode)
                 {
@@ -198,6 +210,31 @@ namespace DynamicSample
                     new Font(FontFamily.GenericMonospace, szVal, FontStyle.Italic, GraphicsUnit.Pixel),
                     new SolidBrush(lastHit ? Color.Green : Color.Red), x - 35, y - 43);
             }
+        }
+
+        void FrmSample_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            Logger.WriteLog(() => $@"{nameof(FrmSample_FormClosing)}: Завершение работы программы в обычном режиме...{Environment.NewLine}Причина: {e.CloseReason}.", Logger.LogLevel.DEBUG);
+
+            try
+            {
+                GameSession.SaveStopSessionsToFile();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmSample_FormClosing)}: Ошибка: {ex.Message}.", Logger.LogLevel.ERROR);
+                e.Cancel = MessageBox.Show(this,
+                    $@"Ошибка при сохранении опыта игры: ""{ex.Message}""{Environment.NewLine}Всё равно выйти?",
+                    @"Ошибка", MessageBoxButtons.YesNo) != DialogResult.Yes;
+            }
+
+            if (e.Cancel)
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmSample_FormClosing)}: Произошла ошибка при сохранении наработанного опыта, и пользователь отменил выход из программы.", Logger.LogLevel.DEBUG);
+                return;
+            }
+
+            Logger.WriteLog(() => $@"{nameof(FrmSample_FormClosing)}: Работа в обычном режиме завершена.");
         }
     }
 }

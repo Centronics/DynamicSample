@@ -13,6 +13,8 @@ namespace DynamicSample
 
         public static bool ExplicitLogEnabled { get; private set; }
 
+        public static string BaseFilePath => $@"{Application.StartupPath}\{Application.ProductName}";
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -20,15 +22,17 @@ namespace DynamicSample
             {
                 try
                 {
-                    Thread.CurrentThread.Name = @"Main Thread";
-                    Application.EnableVisualStyles();
-                    Application.SetCompatibleTextRenderingDefault(false);
-
                     InvertModeEnabled = GetParameter(IsInvertMode);
                     DebugLogEnabled = GetParameter(IsDebugLog);
                     ExplicitLogEnabled = GetParameter(IsExplicitLog);
 
+                    bool isBotMode = GetParameter(IsBotMode);
+
                     Logger.Initialize();
+
+                    Thread.CurrentThread.Name = @"Main Thread";
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
 
                     string invertModeString =
                         InvertModeEnabled ? @"Режим инверсии включен." : @"Режим инверсии выключен.";
@@ -36,19 +40,23 @@ namespace DynamicSample
                         DebugLogEnabled ? @"Режим журналирования включен." : @"Режим журналирования выключен.";
                     string explicitLogString =
                         ExplicitLogEnabled ? @"Режим расширенной диагностики включен." : @"Режим расширенной диагностики выключен.";
+                    string botModeString =
+                        isBotMode ? @"Игра началась. Режим бота включен..." : @"Игра началась. Режим бота выключен...";
 
                     Logger.WriteLog(() => $@"{nameof(Main)}: {invertModeString}");
                     Logger.WriteLog(() => $@"{nameof(Main)}: {debugLogString}");
                     Logger.WriteLog(() => $@"{nameof(Main)}: {explicitLogString}");
+                    Logger.WriteLog(() => $@"{nameof(Main)}: {botModeString}");
 
-                    if (GetParameter(IsBotMode))
+                    GameSession.LoadStopSessionsFromFile();
+
+                    if (isBotMode)
                     {
-                        Logger.WriteLog(() => $@"{nameof(Main)}: Игра началась. Режим бота включен...");
+                        FrmGameBot.LoadProfilesFromFile();
                         Application.Run(new FrmGameBot());
                         return;
                     }
 
-                    Logger.WriteLog(() => $@"{nameof(Main)}: Игра началась. Режим бота выключен...");
                     Application.Run(new FrmSample());
                 }
                 finally

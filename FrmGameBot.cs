@@ -55,13 +55,31 @@ namespace DynamicSample
                 {
                     public BitImages()
                     {
-                        // Empty (for serialization)
+                        Logger.WriteLog(() => $@"{nameof(BitImages)}: Сериализация...", Logger.LogLevel.DEBUG);
                     }
 
                     public BitImages(BitImages bi)
                     {
                         if (bi is null)
+                        {
+                            Logger.WriteLog(() => $@"{nameof(BitImages)}: Конструктор копирования (по умолчанию).", Logger.LogLevel.DEBUG);
                             return;
+                        }
+
+                        StringBuilder sb = new StringBuilder();
+
+                        sb.AppendLine(@"(Конструктор копирования)");
+                        sb.AppendLine($@"{nameof(FieldSize)} = ({bi.FieldSize.Width}) x ({bi.FieldSize.Height})");
+                        sb.AppendLine($@"{nameof(Name)} = {bi.Name}");
+                        sb.AppendLine($@"{nameof(Coords)} = ({bi.Coords.X}, {bi.Coords.Y})");
+                        sb.AppendLine(bi.Data is null
+                            ? $@"{nameof(Data.Count)} = <null>"
+                            : $@"{nameof(Data.Count)} = {bi.Data.Count}");
+
+                        Logger.WriteLog(() => $@"{nameof(BitImages)}: {sb}.", Logger.LogLevel.DEBUG);
+
+                        if (bi.Data is null)
+                            throw new ArgumentNullException(nameof(bi), $@"{nameof(BitImages)}: Данные изображения должны быть заданы.");
 
                         FieldSize = bi.FieldSize;
                         Name = bi.Name;
@@ -127,10 +145,10 @@ namespace DynamicSample
             public List<HitSettings> Profiles { get; set; } = new List<HitSettings>();
 
             [XmlIgnore]
-            static string SettingsFilePath => $@"{Application.StartupPath}\{Application.ProductName}_{nameof(FrmGameBot)}Settings.xml";
+            static string SettingsFilePath => $@"{Launcher.BaseFilePath}_{nameof(FrmGameBot)}Settings.xml";
 
             [XmlIgnore]
-            public static SettingsProfilesArray CurrentSettings
+            public static SettingsProfilesArray CurrentProfileSettings
             {
                 get
                 {
@@ -249,9 +267,13 @@ namespace DynamicSample
             InitializeComponent();
         }
 
-        readonly SettingsProfilesArray _settingProfiles = SettingsProfilesArray.CurrentSettings;
+        static SettingsProfilesArray _profileSettings;
 
         SettingsProfilesArray.HitSettings _selectedProfileSettings = new SettingsProfilesArray.HitSettings();
+
+        public static void LoadProfilesFromFile() => _profileSettings = SettingsProfilesArray.CurrentProfileSettings;
+
+        public static void SaveProfilesToFile() => SettingsProfilesArray.CurrentProfileSettings = _profileSettings;
 
         static Bitmap TakeScreenshot()
         {
@@ -330,6 +352,8 @@ namespace DynamicSample
 
         void EscapeThreadFunc()
         {
+            Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Запущен поток обработки горячих клавиш.", Logger.LogLevel.DEBUG);
+
             try
             {
                 while (!ProgramStopFlag)
@@ -340,8 +364,19 @@ namespace DynamicSample
                     while (!ProgramStopFlag && NativeMethods.GetAsyncKeyState(Keys.Escape) != 0)
                         Thread.Sleep(10);
 
-                    if (ProgramStopFlag || !(StopperThread is null))
+                    if (ProgramStopFlag)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Закрываю поток ({Thread.CurrentThread.Name})...", Logger.LogLevel.DEBUG);
                         continue;
+                    }
+
+                    if (!(StopperThread is null))
+                    {
+                        Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Выход из игры (бота) уже в процессе...", Logger.LogLevel.DEBUG);
+                        continue;
+                    }
+
+                    Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Запускаю выход из игры (бота)...", Logger.LogLevel.DEBUG);
 
                     Thread t = new Thread(() =>
                     {
@@ -352,6 +387,8 @@ namespace DynamicSample
                                 Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Игра (бот) остановлена клавишей ESC.", Logger.LogLevel.ERROR);
                                 return;
                             }
+
+                            Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Выхожу из игры по клавише ESC ({Keys.Escape})...", Logger.LogLevel.DEBUG);
 
                             SafeExecute(() =>
                             {
@@ -364,7 +401,7 @@ namespace DynamicSample
                                     Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: {nameof(Application.Exit)}: {ex.Message}", Logger.LogLevel.ERROR);
                                 }
                             }, true);
-                            Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Exited by ESC ({Keys.Escape}).", Logger.LogLevel.DEBUG);
+                            Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Вышел из игры по клавише ESC ({Keys.Escape}).", Logger.LogLevel.DEBUG);
                         }
                         catch (Exception ex)
                         {
@@ -389,22 +426,24 @@ namespace DynamicSample
             {
                 Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: {ex.Message}", Logger.LogLevel.ERROR);
             }
+
+            Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Поток обработки горячих клавиш остановлен.", Logger.LogLevel.DEBUG);
         }
 
         void AddProfile()
         {
-            for (int k = 0; k < _settingProfiles.Profiles.Count; k++)
+            for (int k = 0; k < _profileSettings.Profiles.Count; k++)
             {
-                if (_selectedProfileSettings.ProfileName != _settingProfiles.Profiles[k].ProfileName)
+                if (_selectedProfileSettings.ProfileName != _profileSettings.Profiles[k].ProfileName)
                     continue;
 
-                _settingProfiles.Profiles.RemoveAt(k);
-                _settingProfiles.Profiles.Insert(k, _selectedProfileSettings);
+                _profileSettings.Profiles.RemoveAt(k);
+                _profileSettings.Profiles.Insert(k, _selectedProfileSettings);
                 _needSaveProfile = false;
                 return;
             }
 
-            _settingProfiles.Profiles.Insert(0, _selectedProfileSettings);
+            _profileSettings.Profiles.Insert(0, _selectedProfileSettings);
             cbxProfiles.Items.Insert(1, _selectedProfileSettings.ProfileName);
             _needSaveProfile = false;
         }
@@ -427,8 +466,10 @@ namespace DynamicSample
             return b;
         }
 
-        void FrmGameSettings_Shown(object sender, EventArgs e)
+        void FrmGameBot_Shown(object sender, EventArgs e)
         {
+            Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Начало работы в режиме ""бот"".");
+
             TransparencyKey = pbScreenField.BackColor = Color.Red;
 
             _escapeThread = new Thread(EscapeThreadFunc)
@@ -438,19 +479,27 @@ namespace DynamicSample
             };
             _escapeThread.Start();
 
+            Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Запущен поток {_escapeThread.Name}.", Logger.LogLevel.DEBUG);
+
             _btnStartCaption = btnGameStart.Text;
 
-            foreach (SettingsProfilesArray.HitSettings pf in _settingProfiles.Profiles)
-                cbxProfiles.Items.Insert(1, pf.ProfileName);
-
-            if (!_settingProfiles.Profiles.Any())
+            foreach (SettingsProfilesArray.HitSettings pf in _profileSettings.Profiles)
             {
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Загружен профиль {pf.ProfileName}.", Logger.LogLevel.DEBUG);
+                cbxProfiles.Items.Insert(1, pf.ProfileName);
+            }
+
+            if (!_profileSettings.Profiles.Any())
+            {
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Пользовательский интерфейс готов к работе. Профилей настроек нет.", Logger.LogLevel.DEBUG);
                 cbxProfiles.SelectedIndex = 0;
                 return;
             }
 
-            _selectedProfileSettings = _settingProfiles.Profiles[0];
+            _selectedProfileSettings = _profileSettings.Profiles[0];
             cbxProfiles.SelectedIndex = 1;
+
+            Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Пользовательский интерфейс готов к работе.", Logger.LogLevel.DEBUG);
         }
 
         Rectangle GameFieldRect => new Rectangle(pbScreenField.PointToScreen(new Point()), pbScreenField.Size);
@@ -1441,30 +1490,65 @@ namespace DynamicSample
 
         void FrmGameBot_FormClosing(object sender, FormClosingEventArgs e)
         {
-            try
+            Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Завершение работы программы в режиме ""бот""...", Logger.LogLevel.DEBUG);
+
+            if (!Save(SaveProfilesToFile))
             {
-                SettingsProfilesArray.CurrentSettings = _settingProfiles;
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Произошла ошибка при сохранении профилей настроек, и пользователь отменил выход из программы.", Logger.LogLevel.DEBUG);
+                return;
             }
-            catch (Exception ex)
+
+            if (!Save(GameSession.SaveStopSessionsToFile))
             {
-                if (MessageBox.Show(this,
-                        $@"Ошибка при сохранении настроек: ""{ex.Message}""{Environment.NewLine}Всё равно выйти?",
-                        @"Ошибка", MessageBoxButtons.YesNo) != DialogResult.Yes)
-                {
-                    e.Cancel = true;
-                    return;
-                }
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Произошла ошибка при сохранении наработанного опыта, и пользователь отменил выход из программы.", Logger.LogLevel.DEBUG);
+                return;
             }
 
             try
             {
                 ProgramStopFlag = true;
-                StopGameBotThread();
-                _escapeThread?.Join();
+
+                if (StopGameBotThread())
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Бот успешно остановлен.", Logger.LogLevel.DEBUG);
+                else
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Бот не был активен.", Logger.LogLevel.DEBUG);
+
+                if (_escapeThread is null)
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Внутренняя ошибка, т.к. поток, отвечающий за горячие клавиши, должен быть всегда активен.", Logger.LogLevel.ERROR);
+                else
+                {
+                    if (_escapeThread.Join(30000))
+                        Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Поток, отвечающий за горячие клавиши, успешно завершён.", Logger.LogLevel.DEBUG);
+                    else
+                        Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Произошла ошибка при завершении потока, отвечающего за горячие клавиши.", Logger.LogLevel.ERROR);
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignored
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Ошибка: {ex.Message}.", Logger.LogLevel.ERROR);
+            }
+
+            Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}: Работа в режиме ""бот"" завершена.");
+
+            return;
+
+            bool Save(Action act)
+            {
+                try
+                {
+                    act();
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_FormClosing)}.{nameof(Save)}: Ошибка: {ex.Message}.", Logger.LogLevel.ERROR);
+                    e.Cancel = MessageBox.Show(this,
+                        $@"Ошибка при сохранении настроек: ""{ex.Message}""{Environment.NewLine}Всё равно выйти?",
+                        @"Ошибка", MessageBoxButtons.YesNo) != DialogResult.Yes;
+
+                    return !e.Cancel;
+                }
+
+                return true;
             }
         }
 
@@ -1495,10 +1579,10 @@ namespace DynamicSample
                     return;
                 }
 
-                if (!_settingProfiles.Profiles.Any())
+                if (!_profileSettings.Profiles.Any())
                     return;
 
-                _selectedProfileSettings = _settingProfiles.Profiles[cbxProfiles.SelectedIndex - 1];
+                _selectedProfileSettings = _profileSettings.Profiles[cbxProfiles.SelectedIndex - 1];
                 _needSaveProfile = false;
                 btnGameStart.Enabled = true;
             }

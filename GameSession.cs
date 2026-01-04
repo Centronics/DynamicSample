@@ -2,11 +2,13 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Xml.Serialization;
 
 namespace DynamicSample
 {
-    internal sealed class GameSession
+    public sealed class GameSession
     {
         public enum Winner
         {
@@ -37,9 +39,225 @@ namespace DynamicSample
 
         static GameSession _lastBotHit;
 
-        static readonly HashSet<GameSession> SessionsStandoff = new HashSet<GameSession>();
+        [Serializable]
+        public sealed class StopSessions
+        {
+            public StopSessions()
+            {
+                Logger.WriteLog(() => $@"{nameof(StopSessions)}: Конструктор по умолчанию.", Logger.LogLevel.DEBUG);
+                SessionsStandoff = new HashSet<GameSession>();
+                SessionsTotal = new HashSet<GameSession>();
+            }
 
-        static readonly HashSet<GameSession> SessionsTotal = new HashSet<GameSession>();
+            public StopSessions(StopSessionsKeeperArrays stopSessionsKeeperStorage)
+            {
+                Logger.WriteLog(() => $@"{nameof(StopSessions)}: Вызван конструктор.", Logger.LogLevel.DEBUG);
+
+                if (stopSessionsKeeperStorage is null)
+                {
+                    Logger.WriteLog(() => $@"{nameof(StopSessions)}: {nameof(stopSessionsKeeperStorage)} is null.", Logger.LogLevel.ERROR);
+                    throw new ArgumentNullException(nameof(stopSessionsKeeperStorage));
+                }
+
+                int countStOff = stopSessionsKeeperStorage.SessionsStandoff.Count;
+                int countTotal = stopSessionsKeeperStorage.SessionsTotal.Count;
+
+                Logger.WriteLog(() => $@"{nameof(StopSessions)}: {nameof(countStOff)} = {countStOff}.", Logger.LogLevel.DEBUG);
+                Logger.WriteLog(() => $@"{nameof(StopSessions)}: {nameof(countTotal)} = {countTotal}.", Logger.LogLevel.DEBUG);
+
+                SessionsStandoff = new HashSet<GameSession>(countStOff);
+                SessionsTotal = new HashSet<GameSession>(countTotal);
+
+                foreach (GameSession gs in stopSessionsKeeperStorage.SessionsStandoff.Select(sk => sk.AsGameSession))
+                {
+                    if (gs is null)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(gs)} is null.", Logger.LogLevel.ERROR);
+                        throw new ArgumentNullException(nameof(gs));
+                    }
+
+                    Logger.WriteLog(() => $@"{nameof(StopSessions)}: {nameof(StopSessionsKeeperArrays.SessionsStandoff)} =>{Environment.NewLine}{gs}.", Logger.LogLevel.DEBUG);
+                    SessionsStandoff.Add(gs);
+                }
+
+                foreach (GameSession gs in stopSessionsKeeperStorage.SessionsTotal.Select(sk => sk.AsGameSession))
+                {
+                    if (gs is null)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(gs)} is null.", Logger.LogLevel.ERROR);
+                        throw new ArgumentNullException(nameof(gs));
+                    }
+
+                    Logger.WriteLog(() => $@"{nameof(StopSessions)}: {nameof(StopSessionsKeeperArrays.SessionsTotal)} =>{Environment.NewLine}{gs}.", Logger.LogLevel.DEBUG);
+                    SessionsTotal.Add(gs);
+                }
+
+                Logger.WriteLog(() => $@"{nameof(StopSessions)}: Все карты успешно загружены.", Logger.LogLevel.DEBUG);
+            }
+
+            [Serializable]
+            public sealed class StopSessionsKeeper
+            {
+                public int[] GameField { get; set; }
+
+                public StopSessionsKeeper()
+                {
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: Сериализация...", Logger.LogLevel.DEBUG);
+                }
+
+                public StopSessionsKeeper(GameSession gameSession)
+                {
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: Вызван конструктор.", Logger.LogLevel.DEBUG);
+
+                    if (gameSession is null)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: {nameof(gameSession)} is null.", Logger.LogLevel.ERROR);
+                        throw new ArgumentNullException();
+                    }
+
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: {nameof(gameSession)} =>{Environment.NewLine}{gameSession}.", Logger.LogLevel.DEBUG);
+
+                    int[,] gf = gameSession._gameField;
+
+                    GameField = new int[gf.Length];
+
+                    for (int y = 0, my = gf.GetLength(1), mIndex = 0; y < my; y++)
+                        for (int x = 0, mx = gf.GetLength(0); x < mx; x++)
+                            GameField[mIndex++] = gf[x, y];
+
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: Карта успешно загружена.", Logger.LogLevel.DEBUG);
+                }
+
+                public GameSession AsGameSession
+                {
+                    get
+                    {
+                        if (GameField is null)
+                            throw new NullReferenceException();
+
+                        if (GameField.Length != 9)
+                            throw new ArgumentException();
+
+                        int[,] gf = new int[3, 3];
+
+                        for (int k = 0; k < 9; k++)
+                            gf[k % 3, k / 3] = GameField[k];
+
+                        return new GameSession(gf);
+                    }
+                }
+            }
+
+            [Serializable]
+            public sealed class StopSessionsKeeperArrays
+            {
+                public HashSet<StopSessionsKeeper> SessionsStandoff { get; set; }
+
+                public HashSet<StopSessionsKeeper> SessionsTotal { get; set; }
+
+                public StopSessionsKeeperArrays()
+                {
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: Конструктор по умолчанию.", Logger.LogLevel.DEBUG);
+
+                    SessionsStandoff = new HashSet<StopSessionsKeeper>();
+                    SessionsTotal = new HashSet<StopSessionsKeeper>();
+                }
+
+                public StopSessionsKeeperArrays(StopSessions stp)
+                {
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: Вызван конструктор.", Logger.LogLevel.DEBUG);
+
+                    if (stp is null)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: {nameof(stp)} is null.", Logger.LogLevel.ERROR);
+                        throw new ArgumentNullException(nameof(stp));
+                    }
+
+                    int countStOff = stp.SessionsStandoff.Count;
+                    int countTotal = stp.SessionsTotal.Count;
+
+                    SessionsStandoff = new HashSet<StopSessionsKeeper>(countStOff);
+                    SessionsTotal = new HashSet<StopSessionsKeeper>(countTotal);
+
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: {nameof(countStOff)} = {countStOff}.", Logger.LogLevel.DEBUG);
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: {nameof(countTotal)} = {countTotal}.", Logger.LogLevel.DEBUG);
+
+                    foreach (GameSession gs in stp.SessionsStandoff)
+                    {
+                        if (gs is null)
+                        {
+                            Logger.WriteLog(() => $@"{nameof(gs)} is null.", Logger.LogLevel.ERROR);
+                            throw new ArgumentNullException(nameof(gs));
+                        }
+
+                        Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: {nameof(StopSessions.SessionsStandoff)} =>{Environment.NewLine}{gs}.", Logger.LogLevel.DEBUG);
+                        SessionsStandoff.Add(new StopSessionsKeeper(gs));
+                    }
+
+                    foreach (GameSession gs in stp.SessionsTotal)
+                    {
+                        if (gs is null)
+                        {
+                            Logger.WriteLog(() => $@"{nameof(gs)} is null.", Logger.LogLevel.ERROR);
+                            throw new ArgumentNullException(nameof(gs));
+                        }
+
+                        Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: {nameof(StopSessions.SessionsTotal)} =>{Environment.NewLine}{gs}.", Logger.LogLevel.DEBUG);
+                        SessionsTotal.Add(new StopSessionsKeeper(gs));
+                    }
+
+                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeperArrays)}: Все карты успешно загружены.", Logger.LogLevel.DEBUG);
+                }
+            }
+
+            public readonly HashSet<GameSession> SessionsStandoff;
+
+            public readonly HashSet<GameSession> SessionsTotal;
+
+            static string SettingsFilePath => $@"{Launcher.BaseFilePath}_{nameof(GameSession)}_{nameof(StopSessions)}.xml";
+
+            [XmlIgnore]
+            public static StopSessions StopSessionsFromFile
+            {
+                get
+                {
+                    try
+                    {
+                        XmlSerializer ser = new XmlSerializer(typeof(StopSessionsKeeperArrays));
+                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Open))
+                        {
+                            Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(get): {nameof(SettingsFilePath)} = {SettingsFilePath}.", Logger.LogLevel.DEBUG);
+                            return new StopSessions((StopSessionsKeeperArrays)ser.Deserialize(fs));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(get): {ex.Message}", Logger.LogLevel.ERROR);
+                        return new StopSessions();
+                    }
+                }
+
+                set
+                {
+                    try
+                    {
+                        XmlSerializer ser = new XmlSerializer(typeof(StopSessionsKeeperArrays));
+                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Create))
+                        {
+                            Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(set): {nameof(SettingsFilePath)} = {SettingsFilePath}.", Logger.LogLevel.DEBUG);
+                            ser.Serialize(fs, new StopSessionsKeeperArrays(value));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(set): {ex.Message}", Logger.LogLevel.ERROR);
+                        throw;
+                    }
+                }
+            }
+        }
+
+        static StopSessions _currentStopSessions;
 
         public const int EmptyHit = 0;
 
@@ -86,6 +304,10 @@ namespace DynamicSample
         public InterModel CurrentModel { get; }
 
         public int this[int x, int y] => _gameField[x, y];
+
+        public static void LoadStopSessionsFromFile() => _currentStopSessions = StopSessions.StopSessionsFromFile;
+
+        public static void SaveStopSessionsToFile() => StopSessions.StopSessionsFromFile = _currentStopSessions;
 
         public static FieldState GetCurrentState(int[,] gameField)
         {
@@ -378,21 +600,23 @@ namespace DynamicSample
                         case InterModel.STANDOFF:
                             if (cw != Winner.STANDOFF)
                             {
-                                SessionsStandoff.Add(_lastBotHit);
+                                _currentStopSessions.SessionsStandoff.Add(_lastBotHit);
                                 Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Игра завершена, я (бот) проиграл, это поведение не приводит к ""ничьей""...{Environment.NewLine}Добавляю в запрещённые (""ничья""):{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG);
+                                break;
                             }
-                            else
-                                Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Это поведение привело в ""ничью""... так и ожидалось!", Logger.LogLevel.DEBUG);
+
+                            Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Это поведение привело в ""ничью""... так и ожидалось!", Logger.LogLevel.DEBUG);
                             break;
                         case InterModel.TOTAL:
-                            SessionsTotal.Add(_lastBotHit);
+                            _currentStopSessions.SessionsTotal.Add(_lastBotHit);
                             if (cw == Winner.USER)
                             {
-                                SessionsStandoff.Add(_lastBotHit);
+                                _currentStopSessions.SessionsStandoff.Add(_lastBotHit);
                                 Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Я (бот) проиграл, поэтому подобное поведение неприемлимо ни с какой точки зрения!{Environment.NewLine}Добавляю в запрещённые:{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG);
+                                break;
                             }
-                            else
-                                Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Ничья! Это поведение явно не может считаться выигрышным...{Environment.NewLine}Вот эта карта:{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG);
+
+                            Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Ничья! Это поведение явно не может считаться выигрышным...{Environment.NewLine}Вот эта карта:{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG);
                             break;
                         case InterModel.NULL:
                         case InterModel.INVERT:
@@ -495,12 +719,14 @@ namespace DynamicSample
                 _curY = _curX = 0;
 
                 InterModel k3 = k;
-                Logger.WriteLog(() => $@"{nameof(HowChangeFrame)}: Переход к следующей модели (текущая {k3}).",
-                    Logger.LogLevel.DEBUG, true);
+                Logger.WriteLog(() => $@"{nameof(HowChangeFrame)}: Переход к следующей модели (текущая {k3}).", Logger.LogLevel.DEBUG, true);
             }
 
             if (result is null)
+            {
+                Logger.WriteLog(() => $@"{nameof(HowChangeFrame)}: {nameof(result)} is null.", Logger.LogLevel.ERROR, true);
                 throw new InvalidOperationException($@"{nameof(result)} почему-то null...");
+            }
 
             InterModel cm = result.CurrentModel;
             if (cm == InterModel.NULL || cm == InterModel.INVERT)
@@ -525,7 +751,7 @@ namespace DynamicSample
             switch (cm)
             {
                 case InterModel.STANDOFF:
-                    if (!SessionsStandoff.Contains(gs))
+                    if (!_currentStopSessions.SessionsStandoff.Contains(gs))
                     {
                         _lastBotHit = gs;
                         Logger.WriteLog(() => $@"{nameof(HowChangeFrame)} ({cm}): Эта карта отсутствует в списке проигрышных, поэтому сохраним текущую карту как последний ход.{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG, true);
@@ -534,7 +760,7 @@ namespace DynamicSample
                     Logger.WriteLog(() => $@"{nameof(HowChangeFrame)} ({cm}): В силу того, что эта карта уже сохранена как нерабочая, оставим последний удар как есть, чтобы не допустить эту же ситуацию в следующий раз.{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG, true);
                     break;
                 case InterModel.TOTAL:
-                    if (!SessionsTotal.Contains(gs))
+                    if (!_currentStopSessions.SessionsTotal.Contains(gs))
                     {
                         _lastBotHit = gs;
                         Logger.WriteLog(() => $@"{nameof(HowChangeFrame)} ({cm}): Эта карта отсутствует в списке проигрышных, поэтому сохраним её как последний ход.{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG, true);
@@ -599,7 +825,7 @@ namespace DynamicSample
                             Logger.WriteLog(() => $@"{nameof(NextFrame)}: Модель {model} не предполагает каких-либо действий. Возвращаю результат (true) ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
                             return (ctx, true);
                         case InterModel.STANDOFF:
-                            if (SessionsStandoff.Contains(ctx))
+                            if (_currentStopSessions.SessionsStandoff.Contains(ctx))
                             {
                                 Logger.WriteLog(() => $@"{nameof(NextFrame)}: Модель {model} - это решение не будет работать, т.е. ""ничья"" не будет достигнута. Поиск решения будет продолжен. Текущее решение ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
                                 continue;
@@ -611,7 +837,7 @@ namespace DynamicSample
                             Logger.WriteLog(() => $@"{nameof(NextFrame)}: Модель {model} - никаких действий не требуется. Продолжаю исследовать возможное решение ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
                             break;
                         case InterModel.TOTAL:
-                            if (SessionsTotal.Contains(ctx))
+                            if (_currentStopSessions.SessionsTotal.Contains(ctx))
                             {
                                 Logger.WriteLog(() => $@"{nameof(NextFrame)}: Модель {model} - это решение не будет работать, т.е. победа не будет достигнута. Поиск решения будет продолжен. Текущее решение ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
                                 continue;
@@ -636,7 +862,7 @@ namespace DynamicSample
                                 return (null, false);
                             }
 
-                            if (SessionsTotal.Contains(ctx))
+                            if (_currentStopSessions.SessionsTotal.Contains(ctx))
                             {
                                 Logger.WriteLog(() => $@"{nameof(NextFrame)}: Победитель {wr}. Бот (я) подедил... Модель {model}. Этот сценарий не будет работать, т.к. он отмечен как проигрышный (возвращаю отсутствие результата (null, false) ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
                                 return (null, false);
@@ -671,7 +897,7 @@ namespace DynamicSample
                                 return (null, false);
                             }
 
-                            if (SessionsTotal.Contains(ctx))
+                            if (_currentStopSessions.SessionsTotal.Contains(ctx))
                             {
                                 Logger.WriteLog(() => $@"{nameof(NextFrame)}: Победитель {wr}. Модель {model}. Этот сценарий не будет работать, т.к. он отмечен как проигрышный, поэтому возвращаю отсутствие результата (null, false) ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
                                 return (null, false);
@@ -689,7 +915,7 @@ namespace DynamicSample
                                 continue;
                             }
 
-                            if (SessionsTotal.Contains(ctx))
+                            if (_currentStopSessions.SessionsTotal.Contains(ctx))
                             {
                                 Logger.WriteLog(() => $@"{nameof(NextFrame)}: Победитель {wr}. Модель {model}. Этот ход не подходит, т.к. помечен как проигрышный. Поиск решения будет продолжен. Текущее решение ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
                                 continue;

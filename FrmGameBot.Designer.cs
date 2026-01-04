@@ -160,7 +160,7 @@
             this.Name = "FrmGameBot";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FrmGameBot_FormClosing);
-            this.Shown += new System.EventHandler(this.FrmGameSettings_Shown);
+            this.Shown += new System.EventHandler(this.FrmGameBot_Shown);
             ((System.ComponentModel.ISupportInitialize)(this.pbScreenField)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();

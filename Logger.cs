@@ -30,7 +30,7 @@ namespace DynamicSample
             public void WaitForFree()
             {
                 do
-                    Thread.Sleep(WaitForFreeTimeout);
+                    Thread.Sleep(WaitForFreeMillisecondsTimeout);
                 while (_usersCount > 0);
             }
         }
@@ -43,13 +43,13 @@ namespace DynamicSample
 
         static volatile int _isStopMode = 1;
 
-        const int LogWaitingTimeout = 10;
+        const int LogWaitingSecondsTimeout = 2;
 
-        const int WriteWaitingTimeout = 10;
+        const int WriteWaitingSecondsTimeout = 10;
 
-        const int ReadWaitingTimeout = 1;
+        const int ReadWaitingSecondsTimeout = 1;
 
-        const int WaitForFreeTimeout = 200;
+        const int WaitForFreeMillisecondsTimeout = 200;
 
         [ThreadStatic]
         static string _threadInfo;
@@ -104,7 +104,7 @@ namespace DynamicSample
 
         static IntStorage GetLogStringsQueue()
         {
-            if (!_rwlSync.TryEnterReadLock(ReadWaitingTimeout * 1000))
+            if (!_rwlSync.TryEnterReadLock(ReadWaitingSecondsTimeout * 1000))
                 throw new Exception();
 
             IntStorage storage;
@@ -127,7 +127,7 @@ namespace DynamicSample
         {
             IntStorage storage = new IntStorage();
 
-            if (!_rwlSync.TryEnterWriteLock(WriteWaitingTimeout * 1000))
+            if (!_rwlSync.TryEnterWriteLock(WriteWaitingSecondsTimeout * 1000))
                 throw new Exception();
 
             try
@@ -217,7 +217,7 @@ namespace DynamicSample
 
             public LogFile()
             {
-                _logFileStream = new FileStream(Path.Combine(Application.StartupPath, @"dSample.log"), FileMode.Append,
+                _logFileStream = new FileStream($@"{Launcher.BaseFilePath}_{nameof(LogFile)}.log", FileMode.Append,
                     FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
                 _logFileStreamWriter = new StreamWriter(_logFileStream, Encoding.UTF8);
             }
@@ -250,7 +250,7 @@ namespace DynamicSample
 
                 while (true)
                 {
-                    int r = WaitHandle.WaitAny(waitHandles, LogWaitingTimeout * 1000);
+                    int r = WaitHandle.WaitAny(waitHandles, LogWaitingSecondsTimeout * 1000);
 
                     WriteToDisk();
 

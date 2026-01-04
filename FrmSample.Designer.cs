@@ -59,6 +59,7 @@
             this.Name = "FrmSample";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Испытательная задача. Крестики-нолики.";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FrmSample_FormClosing);
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.FrmSample_FormClosed);
             this.Shown += new System.EventHandler(this.FrmSample_Shown);
             this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.FrmSample_KeyDown);
