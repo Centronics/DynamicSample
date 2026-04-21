@@ -74,11 +74,10 @@ namespace DynamicSample
         {
             Deinitialize();
 
-            if (!Launcher.DebugLogEnabled && !Launcher.ExplicitLogEnabled)
-                return;
-
             try
             {
+                IsStopMode = false;
+
                 _stopBackground = new ManualResetEvent(false);
                 _rwlSync = new ReaderWriterLockSlim();
 
@@ -86,8 +85,6 @@ namespace DynamicSample
                 {
                     Name = @"LoggerThread"
                 }.Start();
-
-                IsStopMode = false;
             }
             catch
             {
@@ -159,12 +156,13 @@ namespace DynamicSample
 
             try
             {
-                switch (exp)
-                {
-                    case false when !Launcher.DebugLogEnabled:
-                    case true when !Launcher.ExplicitLogEnabled:
-                        return;
-                }
+                if (level != LogLevel.ERROR && level != LogLevel.INFO)
+                    switch (exp)
+                    {
+                        case false when !Launcher.DebugLogEnabled:
+                        case true when !Launcher.ExplicitLogEnabled:
+                            return;
+                    }
 
                 string dt = $@"{DateTime.Now:dd.MM.yyyy HH:mm:ss.ms}";
 

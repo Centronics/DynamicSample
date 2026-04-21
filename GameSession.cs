@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Xml;
 using System.Xml.Serialization;
 
 namespace DynamicSample
@@ -18,7 +19,7 @@ namespace DynamicSample
             NOBODY
         }
 
-        public enum InterModel
+        enum InterModel
         {
             NULL,
             STANDOFF,
@@ -29,13 +30,25 @@ namespace DynamicSample
         public enum FieldState
         {
             EMPTY,
+            WAITBOTHIT,
+            WAITUSERHIT,
             WAITHIT,
-            FULL
+            FULL,
+            ERROR
         }
 
-        readonly int[,] _gameField;
+        enum GameStatus
+        {
+            UNKNOWN,
+            WAITBOTHIT,
+            WAITUSERHIT
+        }
+
+        readonly GameFieldHit[,] _gameField = new GameFieldHit[3, 3];
 
         int _curX, _curY;
+
+        GameStatus CurrentGameStatus { get; set; } = GameStatus.UNKNOWN;
 
         static GameSession _lastBotHit;
 
@@ -98,12 +111,9 @@ namespace DynamicSample
             [Serializable]
             public sealed class StopSessionsKeeper
             {
-                public int[] GameField { get; set; }
+                public GameFieldHit[] GameField { get; set; }
 
-                public StopSessionsKeeper()
-                {
-                    Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: Сериализация...", Logger.LogLevel.DEBUG);
-                }
+                public StopSessionsKeeper() => Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: Сериализация...", Logger.LogLevel.DEBUG);
 
                 public StopSessionsKeeper(GameSession gameSession)
                 {
@@ -117,9 +127,9 @@ namespace DynamicSample
 
                     Logger.WriteLog(() => $@"{nameof(StopSessionsKeeper)}: {nameof(gameSession)} =>{Environment.NewLine}{gameSession}.", Logger.LogLevel.DEBUG);
 
-                    int[,] gf = gameSession._gameField;
+                    GameFieldHit[,] gf = gameSession._gameField;
 
-                    GameField = new int[gf.Length];
+                    GameField = new GameFieldHit[gf.Length];
 
                     for (int y = 0, my = gf.GetLength(1), mIndex = 0; y < my; y++)
                         for (int x = 0, mx = gf.GetLength(0); x < mx; x++)
@@ -138,7 +148,7 @@ namespace DynamicSample
                         if (GameField.Length != 9)
                             throw new ArgumentException();
 
-                        int[,] gf = new int[3, 3];
+                        GameFieldHit[,] gf = new GameFieldHit[3, 3];
 
                         for (int k = 0; k < 9; k++)
                             gf[k % 3, k / 3] = GameField[k];
@@ -214,7 +224,7 @@ namespace DynamicSample
 
             public readonly HashSet<GameSession> SessionsTotal;
 
-            static string SettingsFilePath => $@"{Launcher.BaseFilePath}_{nameof(GameSession)}_{nameof(StopSessions)}.xml";
+            static string StopSessionsFilePath => $@"{Launcher.BaseFilePath}_{nameof(GameSession)}_{nameof(StopSessions)}.xml";
 
             [XmlIgnore]
             public static StopSessions StopSessionsFromFile
@@ -224,10 +234,12 @@ namespace DynamicSample
                     try
                     {
                         XmlSerializer ser = new XmlSerializer(typeof(StopSessionsKeeperArrays));
-                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Open))
+                        using (FileStream fs = new FileStream(StopSessionsFilePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
                         {
-                            Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(get): {nameof(SettingsFilePath)} = {SettingsFilePath}.", Logger.LogLevel.DEBUG);
-                            return new StopSessions((StopSessionsKeeperArrays)ser.Deserialize(fs));
+                            Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(get): {nameof(StopSessionsFilePath)} = {StopSessionsFilePath}.", Logger.LogLevel.DEBUG);
+
+                            using (XmlReader xr = XmlReader.Create(fs))
+                                return new StopSessions((StopSessionsKeeperArrays)ser.Deserialize(xr));
                         }
                     }
                     catch (Exception ex)
@@ -242,10 +254,12 @@ namespace DynamicSample
                     try
                     {
                         XmlSerializer ser = new XmlSerializer(typeof(StopSessionsKeeperArrays));
-                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Create))
+                        using (FileStream fs = new FileStream(StopSessionsFilePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
                         {
-                            Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(set): {nameof(SettingsFilePath)} = {SettingsFilePath}.", Logger.LogLevel.DEBUG);
-                            ser.Serialize(fs, new StopSessionsKeeperArrays(value));
+                            Logger.WriteLog(() => $@"{nameof(StopSessionsFromFile)}(set): {nameof(StopSessionsFilePath)} = {StopSessionsFilePath}.", Logger.LogLevel.DEBUG);
+
+                            using (XmlWriter xw = new XmlTextWriter(fs, Encoding.UTF8))
+                                ser.Serialize(xw, new StopSessionsKeeperArrays(value));
                         }
                     }
                     catch (Exception ex)
@@ -259,41 +273,34 @@ namespace DynamicSample
 
         static StopSessions _currentStopSessions;
 
-        public const int EmptyHit = 0;
+        public enum GameFieldHit
+        {
+            [XmlEnum("Empty_HIT")]
+            EMPTY,
 
-        public const int UserHit = int.MaxValue;
+            [XmlEnum("Bot_HIT")]
+            BOT,
 
-        public const int BotHit = int.MinValue;
+            [XmlEnum("User_HIT")]
+            USER
+        }
 
         public GameSession()
         {
             Logger.WriteLog(() => $@"{nameof(GameSession)}: Конструктор по умолчанию.", Logger.LogLevel.DEBUG, true);
-
-            _gameField = new int[3, 3];
-
-            for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
-                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                    _gameField[x, y] = EmptyHit;
+            Reset();
         }
 
-        public GameSession(int[,] map)
-        {
-            Logger.WriteLog(() => $@"{nameof(GameSession)} ({nameof(Int32)}[,]) {nameof(map)} =>{Environment.NewLine}{ArrayVisualize(map)}.", Logger.LogLevel.DEBUG, true);
+        public GameSession(GameFieldHit[,] map) => Reset(map);
 
-            if (map == null)
-                throw new ArgumentNullException(nameof(map));
-
-            _gameField = GameFieldCopy(map);
-        }
-
-        GameSession(int[,] map, InterModel model)
+        GameSession(GameFieldHit[,] map, InterModel model)
         {
             Logger.WriteLog(() => $@"{nameof(GameSession)} ({nameof(Int32)}[,] {nameof(map)}, {nameof(InterModel)} {nameof(model)}): ({nameof(map)} =>{Environment.NewLine}{ArrayVisualize(map)}{nameof(model)} = {model}).", Logger.LogLevel.DEBUG, true);
 
             if (map == null)
                 throw new ArgumentNullException(nameof(map));
 
-            _gameField = GameFieldCopy(map);
+            GameFieldCopy(_gameField, map);
             CurrentModel = model;
         }
 
@@ -301,40 +308,126 @@ namespace DynamicSample
 
         public int HitY { get; private set; } = -1;
 
-        public InterModel CurrentModel { get; }
+        InterModel CurrentModel { get; }
 
-        public int this[int x, int y] => _gameField[x, y];
+        public GameFieldHit this[int x, int y] => _gameField[x, y];
 
         public static void LoadStopSessionsFromFile() => _currentStopSessions = StopSessions.StopSessionsFromFile;
 
         public static void SaveStopSessionsToFile() => StopSessions.StopSessionsFromFile = _currentStopSessions;
 
-        public static FieldState GetCurrentState(int[,] gameField)
+        public void CancelHit()
         {
-            Logger.WriteLog(() => $@"{nameof(GetCurrentState)}: {ArrayVisualize(gameField)}.", Logger.LogLevel.DEBUG, true);
+            HitX = -1;
+            HitY = -1;
+
+            CurrentGameStatus = GameStatus.UNKNOWN;
+        }
+
+        public void Reset()
+        {
+            Logger.WriteLog(() => $@"{nameof(Reset)}: Сброс игровой сессии (по умолчанию).", Logger.LogLevel.DEBUG, true);
+
+            for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
+                for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
+                    _gameField[x, y] = GameFieldHit.EMPTY;
+
+            _curX = 0;
+            _curY = 0;
+
+            HitX = -1;
+            HitY = -1;
+
+            CurrentGameStatus = GameStatus.UNKNOWN;
+        }
+
+        public void Reset(GameFieldHit[,] map)
+        {
+            Logger.WriteLog(() => $@"{nameof(Reset)}({nameof(Int32)}[,] {nameof(map)}) =>{Environment.NewLine}{ArrayVisualize(map)}.", Logger.LogLevel.DEBUG, true);
+
+            if (map == null)
+                throw new ArgumentNullException(nameof(map));
+
+            GameFieldCopy(_gameField, map);
+
+            _curX = 0;
+            _curY = 0;
+
+            HitX = -1;
+            HitY = -1;
+
+            CurrentGameStatus = GameStatus.UNKNOWN;
+
+            if (CurrentFieldState == FieldState.ERROR)
+                throw new InvalidOperationException();
+        }
+
+        public static void ResetGameData()
+        {
+            if (_lastBotHit is null)
+                Logger.WriteLog(() => $@"{nameof(ResetGameData)}: Отсутствует последний ход, сделанный мной.", Logger.LogLevel.DEBUG);
+            else
+                Logger.WriteLog(() => $@"{nameof(ResetGameData)}: Сбрасываю последний ход, сделанный мной:{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG);
+
+            _lastBotHit = null;
+
+            Logger.WriteLog(() => $@"{nameof(ResetGameData)}: Сбрасываю флаг {nameof(IsGameCompetitorsInverted)} = {IsGameCompetitorsInverted}.", Logger.LogLevel.DEBUG);
+
+            IsGameCompetitorsInverted = false;
+        }
+
+        public static FieldState GetCurrentFieldStateEx(GameFieldHit[,] gameField, GameSession gs = null)
+        {
+            Logger.WriteLog(() => $@"{nameof(GetCurrentFieldStateEx)}: {ArrayVisualize(gameField)}.", Logger.LogLevel.DEBUG);
 
             if (gameField is null)
                 throw new ArgumentNullException();
 
             FieldState fs = GetFs();
-            Logger.WriteLog(() => $@"{nameof(GetCurrentState)}: возвращено {fs}.", Logger.LogLevel.DEBUG, true);
+            Logger.WriteLog(() => $@"{nameof(GetCurrentFieldStateEx)}: возвращено {fs}.", Logger.LogLevel.DEBUG);
             return fs;
 
             FieldState GetFs()
             {
-                if (GetFieldHero(gameField, EmptyHit) == gameField.Length)
+                if (GetFieldHero(gameField, GameFieldHit.EMPTY) == gameField.Length)
                     return FieldState.EMPTY;
 
-                if (GetCurrentWinner(gameField) != Winner.NOBODY)
+                if (GetCurrentWinner(gameField).curWinner != Winner.NOBODY)
                     return FieldState.FULL;
 
-                int uCount = GetFieldHero(gameField, UserHit);
-                int bCount = GetFieldHero(gameField, BotHit);
+                int uCount = GetFieldHero(gameField, GameFieldHit.USER);
+                int bCount = GetFieldHero(gameField, GameFieldHit.BOT);
 
                 if (uCount == bCount)
-                    return FieldState.WAITHIT;
+                {
+                    if (gs is null)
+                        return FieldState.WAITHIT;
 
-                return Math.Abs(uCount - bCount) != 1 ? FieldState.FULL : FieldState.WAITHIT;
+                    switch (gs.CurrentGameStatus)
+                    {
+                        case GameStatus.WAITBOTHIT:
+                            return FieldState.WAITBOTHIT;
+                        case GameStatus.WAITUSERHIT:
+                            return FieldState.WAITUSERHIT;
+                        case GameStatus.UNKNOWN:
+                        default:
+                            return FieldState.WAITHIT;
+                    }
+                }
+
+                int tfs = uCount - bCount;
+
+                Logger.WriteLog(() => $@"{nameof(GetCurrentFieldStateEx)}: Разница между ударами пользователя и бота: {tfs}.", Logger.LogLevel.DEBUG);
+
+                switch (tfs)
+                {
+                    case -1:
+                        return FieldState.WAITUSERHIT;
+                    case 1:
+                        return FieldState.WAITBOTHIT;
+                }
+
+                return FieldState.ERROR;
             }
         }
 
@@ -368,7 +461,7 @@ namespace DynamicSample
             {
                 for (int y = 0, my = _gameField.GetLength(1); y < my; y++)
                     for (int x = 0, mx = _gameField.GetLength(0); x < mx; x++)
-                        yield return _gameField[x, y];
+                        yield return Convert.ToInt32(_gameField[x, y]);
             }
         }
 
@@ -382,24 +475,35 @@ namespace DynamicSample
 
         public static bool operator !=(GameSession a, GameSession b) => !(a == b);
 
-        public Winner CurrentWinner => GetCurrentWinner(_gameField);
+        public Winner CurrentWinner => GetCurrentWinner(_gameField).curWinner;
 
-        public static Winner GetCurrentWinner(int[,] gameField)
+        public (Winner curWinner, Point[] winPts) CurrentWinnerEx => GetCurrentWinner(_gameField);
+
+        public FieldState CurrentFieldState => GetCurrentFieldStateEx(_gameField, this);
+
+        public static (Winner curWinner, Point[] winPts) GetCurrentWinner(GameFieldHit[,] gameField)
         {
             Logger.WriteLog(() => $@"{nameof(GetCurrentWinner)}: {ArrayVisualize(gameField)}.", Logger.LogLevel.DEBUG, true);
 
+            Point[] wPts = new Point[3];
             Winner result = GetCw();
-            Logger.WriteLog(() => $@"{nameof(GetCurrentWinner)}: возвращено {result}.", Logger.LogLevel.DEBUG, true);
-            return result;
+
+            Logger.WriteLog(() => $@"{nameof(GetCurrentWinner)}: Возвращено ({result}, {{({wPts[0].X}, {wPts[0].Y}), ({wPts[1].X}, {wPts[1].Y}), ({wPts[2].X}, {wPts[2].Y})}}).", Logger.LogLevel.DEBUG, true);
+
+            return (result, wPts);
 
             Winner GetCw()
             {
-                bool bh = IsLine(BotHit);
+                bool bh = IsLine(GameFieldHit.BOT);
 
-                switch (IsLine(UserHit))
+                switch (IsLine(GameFieldHit.USER))
                 {
                     case true when bh:
-                        return Winner.STANDOFF;
+                        {
+                            string s = $@"Нестандартная ситуация {nameof(Winner.STANDOFF)}.";
+                            Logger.WriteLog(() => $@"{nameof(GetCurrentWinner)}: {s}", Logger.LogLevel.ERROR, true);
+                            throw new InvalidOperationException(s);
+                        }
                     case true:
                         return Winner.USER;
                     case false when bh:
@@ -408,48 +512,89 @@ namespace DynamicSample
 
                 for (int y = 0, mY = gameField.GetLength(1); y < mY; y++)
                     for (int x = 0, mX = gameField.GetLength(0); x < mX; x++)
-                        if (gameField[x, y] == EmptyHit)
+                        if (gameField[x, y] == GameFieldHit.EMPTY)
                             return Winner.NOBODY;
 
                 return Winner.STANDOFF;
             }
 
-            bool IsLine(int sv)
+            bool IsLine(GameFieldHit sv)
             {
-                if (gameField[0, 0] == sv && gameField[1, 0] == sv &&
+                if (gameField[0, 0] == sv && gameField[1, 0] == sv && // '
                     gameField[2, 0] == sv)
+                {
+                    wPts[0] = new Point(0, 0);
+                    wPts[1] = new Point(1, 0);
+                    wPts[2] = new Point(2, 0);
                     return true;
+                }
 
-                if (gameField[0, 1] == sv && gameField[1, 1] == sv &&
+                if (gameField[0, 1] == sv && gameField[1, 1] == sv && // -
                     gameField[2, 1] == sv)
+                {
+                    wPts[0] = new Point(0, 1);
+                    wPts[1] = new Point(1, 1);
+                    wPts[2] = new Point(2, 1);
                     return true;
+                }
 
-                if (gameField[0, 2] == sv && gameField[1, 2] == sv &&
+                if (gameField[0, 2] == sv && gameField[1, 2] == sv && // _
                     gameField[2, 2] == sv)
+                {
+                    wPts[0] = new Point(0, 2);
+                    wPts[1] = new Point(1, 2);
+                    wPts[2] = new Point(2, 2);
                     return true;
+                }
 
-                if (gameField[0, 0] == sv && gameField[0, 1] == sv &&
+                if (gameField[0, 0] == sv && gameField[0, 1] == sv && // |
                     gameField[0, 2] == sv)
+                {
+                    wPts[0] = new Point(0, 0);
+                    wPts[1] = new Point(0, 1);
+                    wPts[2] = new Point(0, 2);
                     return true;
+                }
 
-                if (gameField[1, 0] == sv && gameField[1, 1] == sv &&
+                if (gameField[1, 0] == sv && gameField[1, 1] == sv && //  |
                     gameField[1, 2] == sv)
+                {
+                    wPts[0] = new Point(1, 0);
+                    wPts[1] = new Point(1, 1);
+                    wPts[2] = new Point(1, 2);
                     return true;
+                }
 
-                if (gameField[2, 0] == sv && gameField[2, 1] == sv &&
+                if (gameField[2, 0] == sv && gameField[2, 1] == sv && //   |
                     gameField[2, 2] == sv)
+                {
+                    wPts[0] = new Point(2, 0);
+                    wPts[1] = new Point(2, 1);
+                    wPts[2] = new Point(2, 2);
                     return true;
+                }
 
-                if (gameField[0, 0] == sv && gameField[1, 1] == sv &&
+                if (gameField[0, 0] == sv && gameField[1, 1] == sv && // \
                     gameField[2, 2] == sv)
+                {
+                    wPts[0] = new Point(0, 0);
+                    wPts[1] = new Point(1, 1);
+                    wPts[2] = new Point(2, 2);
                     return true;
+                }
 
-                return gameField[0, 2] == sv && gameField[1, 1] == sv &&
-                       gameField[2, 0] == sv;
+                if (gameField[0, 2] != sv || gameField[1, 1] != sv || // /
+                    gameField[2, 0] != sv)
+                    return false;
+
+                wPts[0] = new Point(0, 2);
+                wPts[1] = new Point(1, 1);
+                wPts[2] = new Point(2, 0);
+                return true;
             }
         }
 
-        static int GetFieldHero(int[,] gameField, int hero)
+        static int GetFieldHero(GameFieldHit[,] gameField, GameFieldHit hero)
         {
             Logger.WriteLog(() => $@"{nameof(GetFieldHero)}: {nameof(gameField)} = {ArrayVisualize(gameField)}, {nameof(hero)} = {hero}.", Logger.LogLevel.DEBUG, true);
 
@@ -469,7 +614,7 @@ namespace DynamicSample
         {
             Winner fcw = CurrentWinner;
 
-            Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(CurrentWinner)} = {fcw}", Logger.LogLevel.DEBUG, true);
+            Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(CurrentWinner)} = {fcw}.", Logger.LogLevel.DEBUG, true);
 
             switch (fcw)
             {
@@ -485,7 +630,7 @@ namespace DynamicSample
 
             if (_lastBotHit is null)
             {
-                Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(_lastBotHit)} = null", Logger.LogLevel.DEBUG, true);
+                Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(_lastBotHit)} = null.", Logger.LogLevel.DEBUG, true);
                 return;
             }
 
@@ -493,11 +638,11 @@ namespace DynamicSample
 
             for (int y = 0, mY = _gameField.GetLength(1); y < mY; y++)
                 for (int x = 0, mX = _gameField.GetLength(0); x < mX; x++)
-                    if (_gameField[x, y] == EmptyHit)
+                    if (_gameField[x, y] == GameFieldHit.EMPTY)
                     {
-                        _gameField[x, y] = UserHit;
+                        _gameField[x, y] = GameFieldHit.USER;
                         Winner cw = CurrentWinner;
-                        _gameField[x, y] = EmptyHit;
+                        _gameField[x, y] = GameFieldHit.EMPTY;
 
                         if (cw == Winner.STANDOFF && wp is null)
                         {
@@ -511,34 +656,34 @@ namespace DynamicSample
                         if (!MakeUserHit(x, y))
                             throw new InvalidOperationException();
 
-                        Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(MakeUserHit)} = <<<Соперник выиграл>>> ({x}, {y})", Logger.LogLevel.DEBUG, true);
+                        Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(MakeUserHit)} = <<<Соперник выиграл>>> ({x}, {y}).", Logger.LogLevel.DEBUG, true);
 
                         return;
                     }
 
             if (wp is null)
             {
-                Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(MakeUserHit)} = <<<Соперник не выигрывал>>>", Logger.LogLevel.DEBUG, true);
+                Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(MakeUserHit)} = <<<Соперник не выигрывал>>>.", Logger.LogLevel.DEBUG, true);
                 return;
             }
 
             if (!MakeUserHit(wp.Value.X, wp.Value.Y))
                 throw new InvalidOperationException();
 
-            Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(MakeUserHit)} = <<<Была ничья>>> ({wp.Value.X}, {wp.Value.Y})", Logger.LogLevel.DEBUG, true);
+            Logger.WriteLog(() => $@"{nameof(FixGameStep)}: {nameof(MakeUserHit)} = <<<Была ничья>>> ({wp.Value.X}, {wp.Value.Y}).", Logger.LogLevel.DEBUG, true);
         }
 
-        public bool MakeUserHit(int x, int y) => MakeHit(x, y, UserHit);
+        public bool MakeUserHit(int x, int y) => MakeHit(x, y, GameFieldHit.USER);
 
-        public bool MakeBotHit(int x, int y) => MakeHit(x, y, BotHit);
+        public bool MakeBotHit(int x, int y) => MakeHit(x, y, GameFieldHit.BOT);
 
-        bool MakeHit(int x, int y, int hit)
+        bool MakeHit(int x, int y, GameFieldHit hit)
         {
             Logger.WriteLog(() => $@"{nameof(MakeHit)}({x}, {y}, {hit}): Попытка нанесения удара в указанную точку...", Logger.LogLevel.DEBUG, true);
 
-            int v = _gameField[x, y];
+            GameFieldHit v = _gameField[x, y];
 
-            if (v != EmptyHit)
+            if (v != GameFieldHit.EMPTY)
             {
                 Logger.WriteLog(() => $@"{nameof(MakeHit)}({x}, {y}, {hit}): Попытка нанести удар по занятому месту ({v}).", Logger.LogLevel.ERROR);
                 return false;
@@ -546,11 +691,14 @@ namespace DynamicSample
 
             _gameField[x, y] = hit;
 
-            if (hit == BotHit)
+            if (hit == GameFieldHit.BOT)
             {
                 HitX = x;
                 HitY = y;
+                CurrentGameStatus = GameStatus.WAITUSERHIT;
             }
+            else
+                CurrentGameStatus = GameStatus.WAITBOTHIT;
 
             HitFeedBack();
 
@@ -598,10 +746,11 @@ namespace DynamicSample
                     switch (model)
                     {
                         case InterModel.STANDOFF:
-                            if (cw != Winner.STANDOFF)
+                            _currentStopSessions.SessionsTotal.Add(_lastBotHit);
+                            if (cw == Winner.USER)
                             {
-                                _currentStopSessions.SessionsStandoff.Add(_lastBotHit);
                                 Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Игра завершена, я (бот) проиграл, это поведение не приводит к ""ничьей""...{Environment.NewLine}Добавляю в запрещённые (""ничья""):{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG);
+                                _currentStopSessions.SessionsStandoff.Add(_lastBotHit);
                                 break;
                             }
 
@@ -611,8 +760,8 @@ namespace DynamicSample
                             _currentStopSessions.SessionsTotal.Add(_lastBotHit);
                             if (cw == Winner.USER)
                             {
-                                _currentStopSessions.SessionsStandoff.Add(_lastBotHit);
                                 Logger.WriteLog(() => $@"{nameof(HitFeedBack)}: Я (бот) проиграл, поэтому подобное поведение неприемлимо ни с какой точки зрения!{Environment.NewLine}Добавляю в запрещённые:{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG);
+                                _currentStopSessions.SessionsStandoff.Add(_lastBotHit);
                                 break;
                             }
 
@@ -736,8 +885,9 @@ namespace DynamicSample
                 return result;
             }
 
-            int[,] gf = GameFieldCopy(_gameField);
-            gf[result.HitX, result.HitY] = BotHit;
+            GameFieldHit[,] gf = new GameFieldHit[3, 3];
+            GameFieldCopy(gf, _gameField);
+            gf[result.HitX, result.HitY] = GameFieldHit.BOT;
 
             GameSession gs = new GameSession(gf, cm)
             {
@@ -768,6 +918,8 @@ namespace DynamicSample
                     }
                     Logger.WriteLog(() => $@"{nameof(HowChangeFrame)} ({cm}): В силу того, что эта карта уже сохранена как нерабочая, оставим последний удар как есть, чтобы не допустить эту же ситуацию в следующий раз.{Environment.NewLine}{_lastBotHit}.", Logger.LogLevel.DEBUG, true);
                     break;
+                case InterModel.NULL:
+                case InterModel.INVERT:
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -777,17 +929,18 @@ namespace DynamicSample
             return result;
         }
 
-        (GameSession frame, bool end) NextFrame(bool isBot, int[,] map, ref int ctxLength, InterModel model)
+        (GameSession frame, bool end) NextFrame(bool isBot, GameFieldHit[,] map, ref int ctxLength, InterModel model)
         {
             int cl = ctxLength;
-            int[,] mp = map;
+            GameFieldHit[,] mp = map;
             Logger.WriteLog(() => $@"{nameof(NextFrame)}: {nameof(isBot)} = {isBot}, {nameof(ctxLength)} = {cl}, {nameof(model)} = {model}, {nameof(map)} ->{Environment.NewLine}{ArrayVisualize(mp)}.", Logger.LogLevel.DEBUG, true);
 
             int ctl = ++ctxLength;
 
             if (map == null)
             {
-                map = GameFieldCopy(_gameField);
+                map = new GameFieldHit[3, 3];
+                GameFieldCopy(map, _gameField);
                 ctl = ctxLength = 0;
                 int ctxln = ctxLength;
                 Logger.WriteLog(() => $@"{nameof(NextFrame)}: Процедура поиска решения запущена: {nameof(ctxLength)} = {ctxln}, {nameof(ctl)} = {ctl}, {nameof(map)} ->{Environment.NewLine}{ArrayVisualize(map)}.", Logger.LogLevel.DEBUG, true);
@@ -797,15 +950,15 @@ namespace DynamicSample
             {
                 for (int mMainX = map.GetLength(0); _curX < mMainX; _curX++)
                 {
-                    int v = map[_curX, _curY];
+                    GameFieldHit v = map[_curX, _curY];
 
                     Logger.WriteLog(() => $@"{nameof(NextFrame)}: Место предполагаемого удара -> ({nameof(_curX)} = {_curX}, {nameof(_curY)} = {_curY}) => {GetNumberDescription(v, @"<<Empty>>")}.", Logger.LogLevel.DEBUG, true);
 
-                    if (v != EmptyHit)
+                    if (v != GameFieldHit.EMPTY)
                         continue;
 
-                    int hit = isBot ? model == InterModel.INVERT ? UserHit : BotHit :
-                        model == InterModel.INVERT ? BotHit : UserHit;
+                    GameFieldHit hit = isBot ? model == InterModel.INVERT ? GameFieldHit.USER : GameFieldHit.BOT :
+                        model == InterModel.INVERT ? GameFieldHit.BOT : GameFieldHit.USER;
 
                     Logger.WriteLog(() => $@"{nameof(NextFrame)}: Предполагаемый удар {nameof(hit)} = {hit}.", Logger.LogLevel.DEBUG, true);
 
@@ -856,6 +1009,7 @@ namespace DynamicSample
                     {
                         case Winner.BOT:
                             _curX++;
+
                             if (model != InterModel.TOTAL)
                             {
                                 Logger.WriteLog(() => $@"{nameof(NextFrame)}: Победитель {wr}. Бот (я) подедил... Модель {model} должна быть какой-нибудь другой. Возвращаю отсутствие результата (null, false) ->{Environment.NewLine}{ctx}.", Logger.LogLevel.DEBUG, true);
@@ -1015,33 +1169,59 @@ namespace DynamicSample
 
         public override string ToString() => ArrayVisualize(_gameField);
 
-        static int[,] GameFieldCopy(int[,] map)
+        static void GameFieldCopy(GameFieldHit[,] to, GameFieldHit[,] from, bool invert = false)
         {
-            Logger.WriteLog(() => $@"{nameof(GameFieldCopy)}:{Environment.NewLine}{ArrayVisualize(map)}", Logger.LogLevel.DEBUG, true);
+            Logger.WriteLog(() => $@"{nameof(GameFieldCopy)}({nameof(invert)} = {invert}):{Environment.NewLine}{ArrayVisualize(from)}", Logger.LogLevel.DEBUG, true);
 
-            if (map == null)
-                throw new ArgumentNullException(nameof(map));
+            if (to == null)
+                throw new ArgumentNullException(nameof(to));
 
-            int sX = map.GetLength(0), sY = map.GetLength(1);
+            if (from == null)
+                throw new ArgumentNullException(nameof(from));
+
+            int sX = to.GetLength(0), sY = to.GetLength(1);
 
             if (sX != 3)
-                throw new ArgumentException();
+                throw new ArgumentException(nameof(sX));
 
             if (sY != 3)
-                throw new ArgumentException();
+                throw new ArgumentException(nameof(sY));
 
-            int[,] result = new int[sX, sY];
+            sX = from.GetLength(0);
+            sY = from.GetLength(1);
+
+            if (sX != 3)
+                throw new ArgumentException(nameof(sX));
+
+            if (sY != 3)
+                throw new ArgumentException(nameof(sY));
 
             for (int y = 0; y < sY; y++)
                 for (int x = 0; x < sX; x++)
-                    result[x, y] = map[x, y];
-
-            return result;
+                    if (!invert)
+                        to[x, y] = from[x, y];
+                    else
+                    {
+                        switch (from[x, y])
+                        {
+                            case GameFieldHit.BOT:
+                                to[x, y] = GameFieldHit.USER;
+                                break;
+                            case GameFieldHit.USER:
+                                to[x, y] = GameFieldHit.BOT;
+                                break;
+                            case GameFieldHit.EMPTY:
+                                to[x, y] = GameFieldHit.EMPTY;
+                                break;
+                            default:
+                                throw new Exception();
+                        }
+                    }
         }
 
         public static bool IsGameCompetitorsInverted { get; set; }
 
-        public static string ArrayVisualize(int[,] array)
+        public static string ArrayVisualize(GameFieldHit[,] array)
         {
             if (array == null)
                 return @"<null>";
@@ -1072,15 +1252,15 @@ namespace DynamicSample
             return sb.ToString();
         }
 
-        static string GetNumberDescription(int v, string emptyText)
+        static string GetNumberDescription(GameFieldHit v, string emptyText)
         {
             switch (v)
             {
-                case BotHit:
+                case GameFieldHit.BOT:
                     return @"O";
-                case EmptyHit:
+                case GameFieldHit.EMPTY:
                     return emptyText;
-                case UserHit:
+                case GameFieldHit.USER:
                     return @"X";
             }
 

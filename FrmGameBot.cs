@@ -11,11 +11,11 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
+using System.Xml;
 using System.Xml.Serialization;
 using BitImages = DynamicSample.FrmGameBot.SettingsProfilesArray.HitSettings.BitImages;
 using Device = SharpDX.Direct3D11.Device;
 using Format = SharpDX.DXGI.Format;
-using HitCounter = DynamicSample.FrmGameBot.SettingsProfilesArray.HitSettings.HitCounter;
 using MapFlags = SharpDX.Direct3D11.MapFlags;
 using Processor = DynamicParser.Processor;
 using Resource = SharpDX.DXGI.Resource;
@@ -32,31 +32,9 @@ namespace DynamicSample
             public sealed class HitSettings
             {
                 [Serializable]
-                public sealed class HitCounter
-                {
-                    public int Counter { get; set; }
-
-                    public void Inc()
-                    {
-                        ++Counter;
-
-                        if (Counter < 0)
-                            Counter = 0;
-
-                        int c = Counter % 9;
-
-                        if (Counter > 8)
-                            Counter = c;
-                    }
-                }
-
-                [Serializable]
                 public sealed class BitImages
                 {
-                    public BitImages()
-                    {
-                        Logger.WriteLog(() => $@"{nameof(BitImages)}: Сериализация...", Logger.LogLevel.DEBUG);
-                    }
+                    public BitImages() => Logger.WriteLog(() => $@"{nameof(BitImages)}: Сериализация...", Logger.LogLevel.DEBUG);
 
                     public BitImages(BitImages bi)
                     {
@@ -66,17 +44,20 @@ namespace DynamicSample
                             return;
                         }
 
-                        StringBuilder sb = new StringBuilder();
+                        Logger.WriteLog(() =>
+                        {
+                            StringBuilder sb = new StringBuilder();
 
-                        sb.AppendLine(@"(Конструктор копирования)");
-                        sb.AppendLine($@"{nameof(FieldSize)} = ({bi.FieldSize.Width}) x ({bi.FieldSize.Height})");
-                        sb.AppendLine($@"{nameof(Name)} = {bi.Name}");
-                        sb.AppendLine($@"{nameof(Coords)} = ({bi.Coords.X}, {bi.Coords.Y})");
-                        sb.AppendLine(bi.Data is null
-                            ? $@"{nameof(Data.Count)} = <null>"
-                            : $@"{nameof(Data.Count)} = {bi.Data.Count}");
+                            sb.AppendLine(@"(Конструктор копирования)");
+                            sb.AppendLine($@"{nameof(FieldSize)} = ({bi.FieldSize.Width}) x ({bi.FieldSize.Height})");
+                            sb.AppendLine($@"{nameof(Name)} = {bi.Name}");
+                            sb.AppendLine($@"{nameof(Coords)} = ({bi.Coords.X}, {bi.Coords.Y})");
+                            sb.AppendLine(bi.Data is null
+                                ? $@"{nameof(Data.Count)} = <null>"
+                                : $@"{nameof(Data.Count)} = {bi.Data.Count}");
 
-                        Logger.WriteLog(() => $@"{nameof(BitImages)}: {sb}.", Logger.LogLevel.DEBUG);
+                            return $@"{nameof(BitImages)}: {sb}.";
+                        }, Logger.LogLevel.DEBUG);
 
                         if (bi.Data is null)
                             throw new ArgumentNullException(nameof(bi), $@"{nameof(BitImages)}: Данные изображения должны быть заданы.");
@@ -139,10 +120,12 @@ namespace DynamicSample
 
                 public string ProfileName { get; set; } = string.Empty;
 
-                public HitCounter StartHitCounter { get; set; } = new HitCounter();
+                public override string ToString() => string.IsNullOrWhiteSpace(ProfileName) ? @"<<NONAME>>" : ProfileName;
             }
 
             public List<HitSettings> Profiles { get; set; } = new List<HitSettings>();
+
+            public int SelectedProfileIndex { get; set; }
 
             [XmlIgnore]
             static string SettingsFilePath => $@"{Launcher.BaseFilePath}_{nameof(FrmGameBot)}Settings.xml";
@@ -155,8 +138,13 @@ namespace DynamicSample
                     try
                     {
                         XmlSerializer ser = new XmlSerializer(typeof(SettingsProfilesArray));
-                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Open))
-                            return (SettingsProfilesArray)ser.Deserialize(fs);
+                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+                        {
+                            Logger.WriteLog(() => $@"{nameof(SettingsProfilesArray)}(get): {nameof(SettingsFilePath)} = {SettingsFilePath}.", Logger.LogLevel.DEBUG);
+
+                            using (XmlReader xr = XmlReader.Create(fs))
+                                return (SettingsProfilesArray)ser.Deserialize(xr);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -170,8 +158,13 @@ namespace DynamicSample
                     try
                     {
                         XmlSerializer ser = new XmlSerializer(typeof(SettingsProfilesArray));
-                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Create))
-                            ser.Serialize(fs, value);
+                        using (FileStream fs = new FileStream(SettingsFilePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+                        {
+                            Logger.WriteLog(() => $@"{nameof(SettingsProfilesArray)}(set): {nameof(SettingsFilePath)} = {SettingsFilePath}.", Logger.LogLevel.DEBUG);
+
+                            using (XmlWriter xw = new XmlTextWriter(fs, Encoding.UTF8))
+                                ser.Serialize(xw, value);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -196,13 +189,31 @@ namespace DynamicSample
         ///     Хранит значение свойства <see cref="GameBotThread" />.
         /// </remarks>
         /// <seealso cref="GameBotThread" />
-        Thread _recognizerThread;
+        Thread _gameBotThread;
 
         Thread _escapeThread;
 
         bool _escapeThreadStopFlag;
 
         bool _needSaveProfile;
+
+        static volatile int _isBotActivated = 1;
+
+        static bool IsBotActivated
+        {
+            get => _isBotActivated != 0;
+
+            set
+            {
+                if (value)
+                {
+                    Interlocked.CompareExchange(ref _isBotActivated, 1, 0);
+                    return;
+                }
+
+                Interlocked.CompareExchange(ref _isBotActivated, 0, 1);
+            }
+        }
 
         /// <summary>
         ///     Поток, который останавливает процесс выполнения поискового запроса.
@@ -220,17 +231,17 @@ namespace DynamicSample
         ///     Если никакой запрос не выполняется, значение свойства будет равно <see langword="null" />.
         ///     Свойство потокобезопасно как на чтение, так и на запись.
         ///     Потокобезопасность обеспечивает поле <see cref="_commonLocker" />.
-        ///     Значение свойства содержит поле <see cref="_recognizerThread" />.
+        ///     Значение свойства содержит поле <see cref="_gameBotThread" />.
         /// </remarks>
         /// <seealso cref="_commonLocker" />
-        /// <seealso cref="_recognizerThread" />
+        /// <seealso cref="_gameBotThread" />
         Thread GameBotThread
         {
             get
             {
                 lock (_commonLocker)
                 {
-                    return _recognizerThread;
+                    return _gameBotThread;
                 }
             }
 
@@ -238,7 +249,7 @@ namespace DynamicSample
             {
                 lock (_commonLocker)
                 {
-                    _recognizerThread = value;
+                    _gameBotThread = value;
                 }
             }
         }
@@ -384,7 +395,7 @@ namespace DynamicSample
                         {
                             if (StopGameBotThread())
                             {
-                                Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Игра (бот) остановлена клавишей ESC.", Logger.LogLevel.ERROR);
+                                Logger.WriteLog(() => $@"{nameof(EscapeThreadFunc)}: Игра (бот) остановлена клавишей ESC.");
                                 return;
                             }
 
@@ -432,20 +443,41 @@ namespace DynamicSample
 
         void AddProfile()
         {
+            Logger.WriteLog(() => $@"{nameof(AddProfile)}: Добавляю новый профиль настроек: ""{_selectedProfileSettings}"". Всего профилей {_profileSettings.Profiles.Count}.");
+
             for (int k = 0; k < _profileSettings.Profiles.Count; k++)
             {
-                if (_selectedProfileSettings.ProfileName != _profileSettings.Profiles[k].ProfileName)
+                SettingsProfilesArray.HitSettings profile = _profileSettings.Profiles[k];
+
+                if (string.Compare(_selectedProfileSettings.ToString(), profile.ToString(), StringComparison.OrdinalIgnoreCase) != 0)
+                {
+                    int k1 = k;
+                    Logger.WriteLog(() => $@"{nameof(AddProfile)}: Профили настроек различаются (""{_selectedProfileSettings}"" и ""{profile}""), номер {k1}. Продолжаю поиск по имени...", Logger.LogLevel.DEBUG);
                     continue;
+                }
+
+                Logger.WriteLog(() => $@"{nameof(AddProfile)}: Профили настроек называются одинаково, без учёта регистра (""{_selectedProfileSettings}"" и ""{profile}""), номер {k}. Перезаписываю найденный профиль...", Logger.LogLevel.DEBUG);
 
                 _profileSettings.Profiles.RemoveAt(k);
                 _profileSettings.Profiles.Insert(k, _selectedProfileSettings);
+                _profileSettings.SelectedProfileIndex = k;
+                cbxProfiles.SelectedIndex = k + 1;
                 _needSaveProfile = false;
+
+                Logger.WriteLog(() => $@"{nameof(AddProfile)}: Профиль (""{_selectedProfileSettings}"") успешно перезаписан.");
+
                 return;
             }
 
+            Logger.WriteLog(() => $@"{nameof(AddProfile)}: Добавляю новый профиль настроек: ""{_selectedProfileSettings}"".", Logger.LogLevel.DEBUG);
+
             _profileSettings.Profiles.Insert(0, _selectedProfileSettings);
-            cbxProfiles.Items.Insert(1, _selectedProfileSettings.ProfileName);
+            _profileSettings.SelectedProfileIndex = 0;
+            cbxProfiles.Items.Insert(1, _selectedProfileSettings);
+            cbxProfiles.SelectedIndex = 1;
             _needSaveProfile = false;
+
+            Logger.WriteLog(() => $@"{nameof(AddProfile)}: Добавлен новый профиль настроек: ""{_selectedProfileSettings}"".");
         }
 
         Bitmap CopyGameFieldFromScreen()
@@ -470,36 +502,86 @@ namespace DynamicSample
         {
             Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Начало работы в режиме ""бот"".");
 
-            TransparencyKey = pbScreenField.BackColor = Color.Red;
-
-            _escapeThread = new Thread(EscapeThreadFunc)
+            try
             {
-                IsBackground = true,
-                Name = @"EscapeThread"
-            };
-            _escapeThread.Start();
+                TransparencyKey = pbScreenField.BackColor = Color.Red;
 
-            Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Запущен поток {_escapeThread.Name}.", Logger.LogLevel.DEBUG);
+                _escapeThread = new Thread(EscapeThreadFunc)
+                {
+                    IsBackground = true,
+                    Name = @"EscapeThread"
+                };
+                _escapeThread.Start();
 
-            _btnStartCaption = btnGameStart.Text;
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Запущен поток {_escapeThread.Name}.", Logger.LogLevel.DEBUG);
 
-            foreach (SettingsProfilesArray.HitSettings pf in _profileSettings.Profiles)
-            {
-                Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Загружен профиль {pf.ProfileName}.", Logger.LogLevel.DEBUG);
-                cbxProfiles.Items.Insert(1, pf.ProfileName);
+                _btnStartCaption = btnGameStart.Text;
+
+                cbxProfiles.Items.AddRange(GetProfileStrings().ToArray());
+
+                if (!_profileSettings.Profiles.Any())
+                {
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Пользовательский интерфейс готов к работе. Профилей настроек нет.");
+
+                    _profileSettings.SelectedProfileIndex = -1;
+                    cbxProfiles.SelectedIndex = 0;
+                    return;
+                }
+
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Пользовательский интерфейс готов к работе. Найдено профилей настроек: {_profileSettings.Profiles.Count}.");
+
+                if (_profileSettings.SelectedProfileIndex > -1 &&
+                    _profileSettings.SelectedProfileIndex < _profileSettings.Profiles.Count)
+                {
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Выбран профиль #{_profileSettings.SelectedProfileIndex}.", Logger.LogLevel.DEBUG);
+
+                    _selectedProfileSettings = _profileSettings.Profiles[_profileSettings.SelectedProfileIndex];
+                    cbxProfiles.SelectedIndex = _profileSettings.SelectedProfileIndex + 1;
+
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Выбран профиль ""{_selectedProfileSettings}"".");
+                }
+                else
+                {
+                    if (_profileSettings.SelectedProfileIndex < 0)
+                    {
+                        Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Выбрано создание нового профиля #{_profileSettings.SelectedProfileIndex}.", Logger.LogLevel.DEBUG);
+
+                        _selectedProfileSettings = new SettingsProfilesArray.HitSettings();
+                        _profileSettings.SelectedProfileIndex = -1;
+                        cbxProfiles.SelectedIndex = 0;
+
+                        Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Новый профиль создан ({_selectedProfileSettings}).");
+                    }
+                    else
+                    {
+                        Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Выбран профиль (по умолчанию) #{_profileSettings.SelectedProfileIndex}.", Logger.LogLevel.ERROR);
+
+                        _selectedProfileSettings = _profileSettings.Profiles[0];
+                        _profileSettings.SelectedProfileIndex = 0;
+                        cbxProfiles.SelectedIndex = 1;
+
+                        Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Выбран профиль (по умолчанию) ""{_selectedProfileSettings}"".", Logger.LogLevel.ERROR);
+                    }
+                }
             }
-
-            if (!_profileSettings.Profiles.Any())
+            catch (Exception ex)
             {
-                Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Пользовательский интерфейс готов к работе. Профилей настроек нет.", Logger.LogLevel.DEBUG);
-                cbxProfiles.SelectedIndex = 0;
-                return;
+                Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Исключение ""{ex.Message}""", Logger.LogLevel.ERROR);
+                throw;
             }
-
-            _selectedProfileSettings = _profileSettings.Profiles[0];
-            cbxProfiles.SelectedIndex = 1;
 
             Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Пользовательский интерфейс готов к работе.", Logger.LogLevel.DEBUG);
+
+            return;
+
+            IEnumerable<object> GetProfileStrings()
+            {
+                foreach (SettingsProfilesArray.HitSettings pf in _profileSettings.Profiles)
+                {
+                    Logger.WriteLog(() => $@"{nameof(FrmGameBot_Shown)}: Загружен профиль {pf}.", Logger.LogLevel.DEBUG);
+                    yield return pf;
+                }
+            }
         }
 
         Rectangle GameFieldRect => new Rectangle(pbScreenField.PointToScreen(new Point()), pbScreenField.Size);
@@ -523,7 +605,7 @@ namespace DynamicSample
 
                 const string message = @"Отсутствуют обозначения крестиков (X). Создайте новый профиль.";
 
-                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message}{Environment.NewLine}Не показывать сообщение пользователю = {silent}.");
 
                 if (silent)
                     return false;
@@ -538,7 +620,7 @@ namespace DynamicSample
 
                 const string message = @"Отсутствуют обозначения ноликов (O). Создайте новый профиль.";
 
-                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message}{Environment.NewLine}Не показывать сообщение пользователю = {silent}.");
 
                 if (silent)
                     return false;
@@ -553,7 +635,7 @@ namespace DynamicSample
 
                 const string message = @"Отсутствуют обозначения пустых мест. Создайте новый профиль.";
 
-                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message}{Environment.NewLine}Не показывать сообщение пользователю = {silent}.");
 
                 if (silent)
                     return false;
@@ -562,13 +644,15 @@ namespace DynamicSample
                 return false;
             }
 
-            if (_selectedProfileSettings.Spaces.Count < 9)
+            int spacesCount = _selectedProfileSettings.Spaces.Count;
+
+            if (spacesCount < 9)
             {
                 btnGameStart.Enabled = false;
 
-                string message = $@"Недостаточно обозначений мест ударов. Сейчас их {_selectedProfileSettings.Spaces.Count}, а должно быть 9.";
+                string message = $@"Недостаточно обозначений мест ударов. Сейчас их {spacesCount}, а должно быть 9.";
 
-                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message}{Environment.NewLine}Не показывать сообщение пользователю = {silent}.");
 
                 if (silent)
                     return false;
@@ -577,13 +661,13 @@ namespace DynamicSample
                 return false;
             }
 
-            if (_selectedProfileSettings.Spaces.Count > 9)
+            if (spacesCount > 9)
             {
                 btnGameStart.Enabled = false;
 
-                string message = $@"Мест ударов меньше, чем создано. Сейчас их {_selectedProfileSettings.Spaces.Count}, а должно быть 9. Создайте профиль заново.";
+                string message = $@"Мест ударов меньше, чем создано. Сейчас их {spacesCount}, а должно быть 9. Создайте профиль заново.";
 
-                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message}{Environment.NewLine}Не показывать сообщение пользователю = {silent}.");
 
                 MessageBox.Show(this, message);
                 return false;
@@ -597,7 +681,7 @@ namespace DynamicSample
 
                     const string message = @"Процесс компиляции завершился сбоем.";
 
-                    Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+                    Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message}{Environment.NewLine}Не показывать сообщение пользователю = {silent}.");
 
                     MessageBox.Show(this, message);
                     return false;
@@ -609,13 +693,13 @@ namespace DynamicSample
 
                 string message = $@"Процесс компиляции сборки завершился сбоем.{Environment.NewLine}Текст ошибки: {ex.Message}.";
 
-                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message} silent = {silent}.");
+                Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: {message}{Environment.NewLine}Не показывать сообщение пользователю = {silent}.");
 
                 MessageBox.Show(this, message);
                 return false;
             }
 
-            Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: Успех. silent = {silent}.");
+            Logger.WriteLog(() => $@"{nameof(UpdateProfileStatus)}: Успех. Не показывать сообщение пользователю = {silent}.");
 
             btnGameStart.Enabled = true;
 
@@ -650,6 +734,12 @@ namespace DynamicSample
             {
                 if (radEmptySpace.Checked)
                 {
+                    if (_selectedProfileSettings.Spaces.Count >= 9)
+                    {
+                        _selectedProfileSettings.Spaces.Clear();
+                        _needSaveProfile = true;
+                    }
+
                     BitImages bi = new BitImages
                     {
                         Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
@@ -668,6 +758,12 @@ namespace DynamicSample
 
                 if (radField_X.Checked)
                 {
+                    if (_selectedProfileSettings.Spaces.Count >= 9)
+                    {
+                        _selectedProfileSettings.Spaces.Clear();
+                        _needSaveProfile = true;
+                    }
+
                     BitImages bi = new BitImages
                     {
                         Data = GetBitmapAsInts(CopyGameFieldFromScreen()),
@@ -685,7 +781,17 @@ namespace DynamicSample
                 }
 
                 if (!radField_O.Checked)
-                    return;
+                {
+                    const string m = @"Неизвестно, какой параметр выбран.";
+                    Logger.WriteLog(() => $@"{nameof(BtnSavePosition_Click)}: {m}", Logger.LogLevel.ERROR);
+                    throw new Exception(m);
+                }
+
+                if (_selectedProfileSettings.Spaces.Count >= 9)
+                {
+                    _selectedProfileSettings.Spaces.Clear();
+                    _needSaveProfile = true;
+                }
 
                 BitImages bi1 = new BitImages
                 {
@@ -719,149 +825,164 @@ namespace DynamicSample
             return result;
         }
 
-        void GameHandler(int[,] sessionCopy, ref GameSession gameSession, Dictionary<Size, (BitImages, ProcessorHandler)> pcs, HitCounter hc)
+        void GameHandler(GameSession.GameFieldHit[,] sessionCopy, GameSession gameSession, Dictionary<Size, (BitImages, ProcessorHandler)> pcs)
         {
-            if (sessionCopy is null)
-            {
-                Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(sessionCopy)} is null.", Logger.LogLevel.ERROR);
-                return;
-            }
-
-            if (gameSession is null)
-            {
-                gameSession = new GameSession();
-                GameSession.IsGameCompetitorsInverted = false;
-
-                Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(gameSession)} is null.", Logger.LogLevel.DEBUG);
-            }
-
-            GameSession.FieldState fs = GameSession.GetCurrentState(sessionCopy);
-
-            Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(fs)} = {fs}.", Logger.LogLevel.DEBUG);
-
-            if (gameSession.HitX < 0 || gameSession.HitY < 0)
-            {
-                switch (fs)
-                {
-                    case GameSession.FieldState.EMPTY:
-                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается с пустого поля.", Logger.LogLevel.DEBUG);
-                        gameSession = new GameSession(sessionCopy);
-                        DoFirstHit(gameSession);
-                        GameSession.IsGameCompetitorsInverted = false;
-                        return;
-                    case GameSession.FieldState.FULL:
-                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра завершилась полностью заполненным полем.", Logger.LogLevel.DEBUG);
-                        DoClickActions(pcs);
-                        GameSession.IsGameCompetitorsInverted = false;
-                        return;
-                    case GameSession.FieldState.WAITHIT:
-                        {
-                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Ожидается мой удар...", Logger.LogLevel.DEBUG);
-                            (int hit, Point hitPoint) = GetAloneHit(sessionCopy);
-
-                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(hit)} = {hit}; {nameof(hitPoint)} = ({hitPoint.X}, {hitPoint.Y}).", Logger.LogLevel.DEBUG);
-
-                            switch (hit)
-                            {
-                                case GameSession.EmptyHit:
-                                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается... Неизвестно, какими я играю... Бью на удачу!", Logger.LogLevel.DEBUG);
-                                    DoUnknownHit(gameSession);
-                                    GameSession.IsGameCompetitorsInverted = false;
-                                    return;
-                                case GameSession.UserHit:
-                                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается... Вижу свой удар, хожу крестиками (X).", Logger.LogLevel.DEBUG);
-                                    DoGameHit(gameSession, hitPoint);
-                                    GameSession.IsGameCompetitorsInverted = false;
-                                    return;
-                                case GameSession.BotHit:
-                                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается... Вижу удар пользователя, хожу ноликами (O).", Logger.LogLevel.DEBUG);
-                                    GameSession.IsGameCompetitorsInverted = true;
-                                    DoGameHit(gameSession, hitPoint);
-                                    return;
-                                default:
-                                    throw new Exception($@"Игра начинается... Что-то пошло не так, удар ({hit}).");
-                            }
-                        }
-                    default:
-                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(GameSession.FieldState)} is unknown.", Logger.LogLevel.ERROR);
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
-
-            if (fs == GameSession.FieldState.EMPTY)
-            {
-                if (DoClickActions(pcs))
-                {
-                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Оказалось, что надо было сделать действие.", Logger.LogLevel.DEBUG);
-                    GameSession.IsGameCompetitorsInverted = false;
-                    return;
-                }
-
-                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Вижу, что поле пустое, и наношу первый удар.", Logger.LogLevel.DEBUG);
-
-                gameSession.FixGameStep();
-                gameSession = new GameSession(sessionCopy);
-                DoFirstHit(gameSession);
-                GameSession.IsGameCompetitorsInverted = false;
-
-                return;
-            }
-
-            switch (sessionCopy[gameSession.HitX, gameSession.HitY])
-            {
-                case GameSession.UserHit:
-                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Вижу, что я играю крестиками (X).", Logger.LogLevel.DEBUG);
-                    GameSession.IsGameCompetitorsInverted = true;
-                    return;
-            }
+            #region Block1
 
             Point hp = new Point();
             int diffCount = 0;
+            bool noMyHit = false;
 
             for (int y = 0; y < 3; y++)
                 for (int x = 0; x < 3; x++)
                 {
-                    int m1 = sessionCopy[x, y];
-                    int m2 = gameSession[x, y];
+                    GameSession.GameFieldHit m1 = sessionCopy[x, y];
+                    GameSession.GameFieldHit m2 = gameSession[x, y];
+
+                    #region Block1
 
                     if (m1 == m2)
                         continue;
 
-                    if (m1 != GameSession.EmptyHit && m2 != GameSession.EmptyHit)
-                    {
-                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: При поиске изменений на игровом поле, была найдена ошибка ({m1}, {m2}).", Logger.LogLevel.DEBUG);
-                        gameSession = new GameSession(sessionCopy);
-                        DoClickActions(pcs);
-                        GameSession.IsGameCompetitorsInverted = false;
-                        return;
-                    }
+                    #endregion
 
-                    if (m1 == GameSession.EmptyHit && m2 != GameSession.EmptyHit)
+                    #region Block2
+
+                    if (m1 == GameSession.GameFieldHit.EMPTY && m2 != GameSession.GameFieldHit.EMPTY)
                     {
+                        #region Block1
+
                         if (x == gameSession.HitX && y == gameSession.HitY)
                         {
-                            int x1 = x;
-                            int y1 = y;
-                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Вижу свой последний удар ({x1}, {y1}), который, видимо, не успел отобразиться...", Logger.LogLevel.DEBUG);
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Ждём отображения моего хода на экране ({gameSession.HitX}, {gameSession.HitY}).", Logger.LogLevel.DEBUG);
+                            noMyHit = true;
                             continue;
                         }
 
-                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Странная ситуация - найден какое-то поле, которое должно быть пустое, но это не так ({m2}).", Logger.LogLevel.DEBUG);
+                        #endregion
 
-                        if (DoClickActions(pcs))
+                        #region Block2
+
+                        GameSession.FieldState cfs = gameSession.CurrentFieldState;
+
+                        if (cfs == GameSession.FieldState.FULL || cfs == GameSession.FieldState.ERROR)
                         {
-                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) совершено.", Logger.LogLevel.DEBUG);
-                            GameSession.IsGameCompetitorsInverted = false;
+                            if (!DoClickActions(pcs))
+                                throw new Exception($@"{nameof(GameHandler)}(1): Не удалось перезапустить игровую сессию...");
+
+                            gameSession.Reset();
+                            GameSession.ResetGameData();
                             return;
                         }
 
-                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) не требуется, попробую сходить ""на удачу"".", Logger.LogLevel.DEBUG);
+                        #endregion
 
-                        gameSession = new GameSession(sessionCopy);
-                        DoUnknownHit(gameSession);
-                        GameSession.IsGameCompetitorsInverted = false;
+                        #region Block3
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Странная ситуация - найден какое-то поле на экране ({x}, {y}), которое должно быть занято, но оно пусто ({m2}).", Logger.LogLevel.DEBUG);
+
+                        gameSession.FixGameStep();
+                        gameSession.Reset();
+                        GameSession.ResetGameData();
+
+                        #endregion
+
+                        #region Block4
+
+                        if (!DoClickActions(pcs))
+                            throw new Exception($@"{nameof(GameHandler)}(2): Не удалось перезапустить игровую сессию...");
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) совершено.", Logger.LogLevel.DEBUG);
                         return;
+
+                        #endregion
                     }
+
+                    #endregion
+
+                    #region Block3
+
+                    if (m1 != GameSession.GameFieldHit.EMPTY && m2 != GameSession.GameFieldHit.EMPTY)
+                    {
+                        #region Block1
+
+                        Logger.WriteLog(() =>
+                        {
+                            string xy = $@"({nameof(x)} = {x}, {nameof(y)} = {y}) => ({m1}, {m2})";
+                            return $@"{nameof(GameHandler)}: Необходимо уточнить содержимое игрового поля {xy}.";
+                        }, Logger.LogLevel.DEBUG);
+
+                        GameSession.FieldState cfs = gameSession.CurrentFieldState;
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(GameSession.FieldState)} = {cfs}.", Logger.LogLevel.DEBUG);
+
+                        if (cfs == GameSession.FieldState.FULL || cfs == GameSession.FieldState.ERROR)
+                        {
+                            if (!DoClickActions(pcs))
+                                throw new Exception($@"{nameof(GameHandler)}(3): Не удалось перезапустить игровую сессию...");
+
+                            gameSession.Reset();
+                            GameSession.ResetGameData();
+                            return;
+                        }
+
+                        #endregion
+
+                        #region Block2
+
+                        if (x == gameSession.HitX && y == gameSession.HitY)
+                        {
+                            if (!GameSession.IsGameCompetitorsInverted)
+                            {
+                                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Выполняю коррекцию своей стороны.", Logger.LogLevel.DEBUG);
+                                GameSession.IsGameCompetitorsInverted = true;
+                                return;
+                            }
+
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Инвертировал интерпретацию со своей стороны, но это не помогло.", Logger.LogLevel.ERROR);
+                        }
+                        else
+                            Logger.WriteLog(() =>
+                            {
+                                string xy = $@"({nameof(x)} = {x}, {nameof(y)} = {y}) => ({m1}, {m2})";
+                                return $@"{nameof(GameHandler)}: При поиске изменений на игровом поле, была найдена несостыковка {xy}.";
+                            }, Logger.LogLevel.ERROR);
+
+                        #endregion
+
+                        #region Block3
+
+                        Logger.WriteLog(() =>
+                        {
+                            string st0 = $@"{nameof(GameHandler)}: ";
+                            const string st1 = @"Игра продолжается... Заметил разницу в картах, применяю карту с экрана.";
+                            const string st2 = @"Поступившая карта ->";
+                            string mx = GameSession.ArrayVisualize(sessionCopy);
+                            const string st3 = @"Моя карта ->";
+
+                            return $@"{st0}{st1}{Environment.NewLine}{st2}{Environment.NewLine}{mx}{Environment.NewLine}{st3}{Environment.NewLine}{gameSession}.";
+                        }, Logger.LogLevel.DEBUG);
+
+                        gameSession.FixGameStep();
+                        gameSession.Reset();
+                        GameSession.ResetGameData();
+
+                        #endregion
+
+                        #region Block4
+
+                        if (!DoClickActions(pcs))
+                            throw new Exception($@"{nameof(GameHandler)}: Игра останавливается по причине неизвестной ошибки! Сброс игры не удался! Прекращаю игру!");
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Надо было закрыть всплывающее окно...", Logger.LogLevel.DEBUG);
+                        return;
+
+                        #endregion
+                    }
+
+                    #endregion
+
+                    #region Block4
 
                     hp = new Point(x, y);
                     ++diffCount;
@@ -869,106 +990,241 @@ namespace DynamicSample
                     Point hp1 = hp;
                     int dc = diffCount;
                     Logger.WriteLog(() => $@"{nameof(GameHandler)}: Найдена точка удара соперника ({hp1.X}, {hp1.Y}). Количество найденных изменений {dc}.", Logger.LogLevel.DEBUG);
+
+                    #endregion
                 }
+
+            #endregion
+
+            #region Block2
 
             if (diffCount < 1)
             {
                 Logger.WriteLog(() => $@"{nameof(GameHandler)}: Количество отличий должно быть равно одному, а не ({diffCount}).", Logger.LogLevel.DEBUG);
 
-                if (DoClickActions(pcs))
-                {
-                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) совершено.", Logger.LogLevel.DEBUG);
-                    GameSession.IsGameCompetitorsInverted = false;
-                    return;
-                }
+                GameSession.FieldState cfs = gameSession.CurrentFieldState;
 
-                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Действие (клик) не требуется.", Logger.LogLevel.DEBUG);
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: {nameof(cfs)} = {cfs}.", Logger.LogLevel.DEBUG);
+
+                switch (cfs)
+                {
+                    #region Block1
+
+                    case GameSession.FieldState.EMPTY:
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра начинается... Вижу, что поле пустое, и наношу первый удар.", Logger.LogLevel.DEBUG);
+
+                        GameSession.ResetGameData();
+
+                        (int gx, int gy) = gameSession.MakeHitDecision();
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Планируется нанести первый удар ({gx}, {gy}).", Logger.LogLevel.DEBUG);
+
+                        if (!gameSession.MakeBotHit(gx, gy))
+                            throw new Exception($@"{nameof(GameHandler)}: Странное решение (1) ({gx}, {gy}).");
+
+                        DoPhysicalHit(gx, gy);
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Первый удар нанесён ({gx}, {gy}).", Logger.LogLevel.DEBUG);
+
+                        return;
+
+                    #endregion
+
+                    #region Block2
+
+                    case GameSession.FieldState.WAITHIT:
+                        throw new Exception();
+
+                    case GameSession.FieldState.WAITUSERHIT:
+                    case GameSession.FieldState.WAITBOTHIT:
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Статус игры ({cfs}).", Logger.LogLevel.DEBUG);
+
+                        if (noMyHit)
+                        {
+                            if (cfs != GameSession.FieldState.WAITUSERHIT)
+                                throw new Exception();
+
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Не вижу свой удар, попробую сделать его снова.", Logger.LogLevel.DEBUG);
+                            DoPhysicalHit(gameSession.HitX, gameSession.HitY);
+                            break;
+                        }
+
+                        if (cfs != GameSession.FieldState.WAITBOTHIT)
+                        {
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра в состоянии, когда она не ждёт удара бота, поэтому делать ничего не буду.", Logger.LogLevel.DEBUG);
+                            break;
+                        }
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Отменяю своё решение сделать ход ({gameSession.HitX}, {gameSession.HitY}).", Logger.LogLevel.DEBUG);
+
+                        gameSession.CancelHit();
+
+                        (int dx, int dy) = gameSession.MakeHitDecision();
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Сформировано решение по ответному удару ({dx}, {dy}).", Logger.LogLevel.DEBUG);
+
+                        if (!gameSession.MakeBotHit(dx, dy))
+                            throw new Exception($@"{nameof(GameHandler)}: Странное решение (2) ({dx}, {dy}).");
+
+                        DoPhysicalHit(dx, dy);
+
+                        GameSession.FieldState cfs1 = gameSession.CurrentFieldState;
+
+                        if (cfs1 != GameSession.FieldState.FULL && cfs1 != GameSession.FieldState.ERROR)
+                        {
+                            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Я нанёс удар ({dx}, {dy}). Статус игры ({cfs1}).", Logger.LogLevel.DEBUG);
+                            return;
+                        }
+
+                        if (!DoClickActions(pcs))
+                            throw new Exception($@"{nameof(GameHandler)}(4): Не удалось перезапустить игровую сессию...");
+
+                        gameSession.Reset();
+                        GameSession.ResetGameData();
+
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Возникла неизвестная ошибка. Начинаю игру заново. Статус игры ({cfs1}).", Logger.LogLevel.ERROR);
+
+                        break;
+
+                    #endregion
+
+                    #region Block3
+
+                    case GameSession.FieldState.FULL:
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра завершается... Статус игры ({cfs}).", Logger.LogLevel.DEBUG);
+
+                        if (noMyHit && GameSession.GetCurrentFieldStateEx(sessionCopy) != GameSession.FieldState.FULL)
+                        {
+                            DoPhysicalHit(gameSession.HitX, gameSession.HitY);
+                            return;
+                        }
+
+                        if (!DoClickActions(pcs))
+                            throw new Exception($@"{nameof(GameHandler)}(5): Не удалось перезапустить игровую сессию...");
+
+                        gameSession.Reset();
+                        GameSession.ResetGameData();
+                        return;
+
+                    case GameSession.FieldState.ERROR:
+                        throw new Exception($@"{nameof(GameHandler)}: Игра завершена с ошибкой! Значение ({cfs}).");
+
+                    #endregion
+
+                    #region Block4
+
+                    default:
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игра продолжается... Неизвестное значение ({cfs}).", Logger.LogLevel.ERROR);
+                        throw new ArgumentOutOfRangeException(nameof(cfs), $@"Неизвестное значение ({cfs}).");
+
+                        #endregion
+                }
 
                 return;
             }
+
+            #endregion
+
+            #region Block3
 
             if (diffCount == 1)
             {
+                #region Block1
+
+                if (noMyHit)
+                {
+                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Вижу ход соперника, но не вижу свой удар ({gameSession.HitX}, {gameSession.HitY}), поэтому отменяю решение о нём.{Environment.NewLine}Карта на экране:{Environment.NewLine}{GameSession.ArrayVisualize(sessionCopy)}{Environment.NewLine}Моя карта:{Environment.NewLine}{gameSession}.", Logger.LogLevel.DEBUG);
+                    gameSession.CancelHit();
+                }
+
                 Logger.WriteLog(() => $@"{nameof(GameHandler)}: Ход соперника определён ({hp.X}, {hp.Y}). Наношу удар.", Logger.LogLevel.DEBUG);
 
-                DoGameHit(gameSession, hp);
+                if (!gameSession.MakeUserHit(hp.X, hp.Y))
+                    throw new Exception($@"{nameof(GameHandler)}: Что-то пошло не так ({hp.X}, {hp.Y}).");
+
+                #endregion
+
+                #region Block2
+
+                GameSession.FieldState cfs = gameSession.CurrentFieldState;
+
+                if (cfs == GameSession.FieldState.FULL || cfs == GameSession.FieldState.ERROR)
+                {
+                    if (cfs == GameSession.FieldState.FULL)
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Соперник нанёс удар ({hp.X}, {hp.Y}) ({cfs}). Партия завершена.", Logger.LogLevel.DEBUG);
+                    else
+                        Logger.WriteLog(() => $@"{nameof(GameHandler)}: Ход соперника ({hp.X}, {hp.Y}) вызвал ошибку ({cfs}), попробую перезапустить игру...", Logger.LogLevel.ERROR);
+
+                    if (!DoClickActions(pcs))
+                        throw new Exception($@"{nameof(GameHandler)}(6): Не удалось перезапустить игровую сессию...");
+
+                    gameSession.Reset();
+                    GameSession.ResetGameData();
+                    return;
+                }
+
+                #endregion
+
+                #region Block3
+
+                (int dx, int dy) = gameSession.MakeHitDecision();
+
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Принято решение нанести ответный удар ({dx}, {dy}).", Logger.LogLevel.DEBUG);
+
+                if (!gameSession.MakeBotHit(dx, dy))
+                    throw new Exception($@"{nameof(GameHandler)}: Странное решение (3) ({dx}, {dy}).");
+
+                DoPhysicalHit(dx, dy);
+
+                #endregion
+
+                #region Block4
+
+                cfs = gameSession.CurrentFieldState;
+
+                if (cfs != GameSession.FieldState.FULL && cfs != GameSession.FieldState.ERROR)
+                {
+                    Logger.WriteLog(() => $@"{nameof(GameHandler)}: Ход сделан {cfs}: ({dx}, {dy}), игра продолжается.", Logger.LogLevel.DEBUG);
+                    return;
+                }
+
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Перезапускаю игровую сессию ({cfs})...", Logger.LogLevel.ERROR);
+
+                if (!DoClickActions(pcs))
+                    throw new Exception($@"{nameof(GameHandler)}(7): Не удалось перезапустить игровую сессию...");
+
+                gameSession.Reset();
+                GameSession.ResetGameData();
+
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Игровая сессия была перезапущена из-за ошибки.", Logger.LogLevel.ERROR);
+
                 return;
+
+                #endregion
             }
 
-            if (DoClickActions(pcs))
-            {
-                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Не удалось определить ход соперника. Действие (клик) совершено. Количество отличий ({diffCount}).", Logger.LogLevel.DEBUG);
-                GameSession.IsGameCompetitorsInverted = false;
-                return;
-            }
+            #endregion
+
+            #region Block4
 
             Logger.WriteLog(() => $@"{nameof(GameHandler)}: Не удалось определить ход соперника. Действие (клик) не требуется. Количество отличий ({diffCount}).", Logger.LogLevel.DEBUG);
 
-            gameSession = new GameSession(sessionCopy);
-            DoUnknownHit(gameSession);
-            GameSession.IsGameCompetitorsInverted = false;
-
-            return;
-
-            (int hit, Point hitPoint) GetAloneHit(int[,] mp)
+            if (noMyHit)
             {
-                if (mp is null)
-                    throw new ArgumentNullException();
-
-                (int hit, Point hitPoint) result = new ValueTuple<int, Point>();
-
-                for (int y = 0, mY = mp.GetLength(1); y < mY; y++)
-                    for (int x = 0, mX = mp.GetLength(0); x < mX; x++)
-                    {
-                        int v = mp[x, y];
-
-                        if (v == GameSession.EmptyHit)
-                            continue;
-
-                        if (result.hit != GameSession.EmptyHit)
-                            return (GameSession.EmptyHit, new Point());
-
-                        result = (v, new Point(x, y));
-                    }
-
-                return result;
+                Logger.WriteLog(() => $@"{nameof(GameHandler)}: Отменяю свой планируемый удар ({gameSession.HitX}, {gameSession.HitY}).", Logger.LogLevel.DEBUG);
+                gameSession.CancelHit();
             }
 
-            void DoUnknownHit(GameSession gs)
-            {
-                (int x, int y) = gs.MakeHitDecision();
+            gameSession.FixGameStep();
+            gameSession.Reset();
+            GameSession.ResetGameData();
 
-                if (!gs.MakeBotHit(x, y))
-                    throw new Exception($@"{nameof(DoUnknownHit)}: Странное решение ({x}, {y}).");
+            if (!DoClickActions(pcs))
+                throw new Exception($@"{nameof(GameHandler)}(8): Не удалось перезапустить игровую сессию...");
 
-                DoPhysicalHit(x, y);
-            }
+            Logger.WriteLog(() => $@"{nameof(GameHandler)}: Не удалось определить ход соперника. Действие (клик) совершено. Количество отличий ({diffCount}).", Logger.LogLevel.DEBUG);
 
-            void DoFirstHit(GameSession gs)
-            {
-                hc.Inc();
-                int x = hc.Counter % 3, y = hc.Counter / 3;
-                if (!gs.MakeBotHit(x, y))
-                    throw new Exception($@"{nameof(DoFirstHit)}: Странное решение ({x}, {y}).");
-                DoPhysicalHit(gs.HitX, gs.HitY);
-            }
-
-            void DoGameHit(GameSession gs, Point hitPoint)
-            {
-                if (!gs.MakeUserHit(hitPoint.X, hitPoint.Y))
-                    throw new Exception(
-                        $@"{nameof(DoGameHit)}: Что-то пошло не так ({hitPoint.X}, {hitPoint.Y}).");
-
-                if (gs.CurrentWinner != GameSession.Winner.NOBODY)
-                    return;
-
-                (int x, int y) = gs.MakeHitDecision();
-
-                if (!gs.MakeBotHit(x, y))
-                    throw new Exception($@"{nameof(DoGameHit)}: Странное решение ({x}, {y}).");
-
-                DoPhysicalHit(x, y);
-            }
+            #endregion
         }
 
         ProcessorContainer ProcessorContainerFromSettings => new ProcessorContainer(_selectedProfileSettings.Spaces.Select((bi, bx) =>
@@ -980,8 +1236,10 @@ namespace DynamicSample
             return p;
         }).ToArray());
 
-        int[,] BuildField(ProcessorContainer req = null)
+        GameSession.GameFieldHit[,] BuildField(ProcessorContainer req = null)
         {
+            #region Block1
+
             Bitmap fullFrameNow = TakeScreenshot();
 
             if (fullFrameNow is null)
@@ -990,92 +1248,103 @@ namespace DynamicSample
                 return null;
             }
 
-            while (true)
+            #endregion
+
+            #region Block2
+
+            IEnumerable<Processor> pFromScreen = _selectedProfileSettings.Spaces.Select(bi =>
             {
-                IEnumerable<Processor> pq1 = _selectedProfileSettings.Spaces.Select(bi =>
+                Logger.WriteLog(() => $@"{nameof(BuildField)}: Область поиска игровой сетки:{Environment.NewLine}1) Общий размер поля: {fullFrameNow.Width} x {fullFrameNow.Height}{Environment.NewLine}2) Необходимо извлечь фрагмент: X: {bi.Coords.X}, Y: {bi.Coords.Y}; W: {bi.FieldSize.Width}, H: {bi.FieldSize.Height}.", Logger.LogLevel.DEBUG, true);
+
+                Processor p = new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z");
+
+                Logger.WriteLog(() => $@"{nameof(BuildField)}: Создана исследуемая карта ({p.Tag}: {p.Width}, {p.Height}).", Logger.LogLevel.DEBUG, true);
+
+                return p;
+            });
+
+            if (req is null)
+                req = ProcessorContainerFromSettings;
+
+            Logger.WriteLog(() =>
+            {
+                StringBuilder r = new StringBuilder($@"{nameof(BuildField)}: Поисковый запрос выглядит следующим образом:");
+
+                for (int k = 0; k < req.Count; k++)
                 {
-                    Logger.WriteLog(() => $@"{nameof(BuildField)}: Область поиска игровой сетки:{Environment.NewLine}1) Общий размер поля: {fullFrameNow.Width} x {fullFrameNow.Height}{Environment.NewLine}2) Необходимо извлечь фрагмент: X: {bi.Coords.X}, Y: {bi.Coords.Y}; W: {bi.FieldSize.Width}, H: {bi.FieldSize.Height}.", Logger.LogLevel.DEBUG, true);
-
-                    Processor p = new Processor(GetBitmapPiece(new Rectangle(bi.Coords, bi.FieldSize), fullFrameNow), @"Z");
-
-                    Logger.WriteLog(() => $@"{nameof(BuildField)}: Создана исследуемая карта ({p.Tag}: {p.Width}, {p.Height}).", Logger.LogLevel.DEBUG, true);
-
-                    return p;
-                });
-
-                if (req is null)
-                    req = ProcessorContainerFromSettings;
-
-                Logger.WriteLog(() =>
-                {
-                    StringBuilder r = new StringBuilder($@"{nameof(BuildField)}: Поисковый запрос выглядит следующим образом:");
-
-                    for (int k = 0; k < req.Count; k++)
-                    {
-                        r.AppendLine();
-                        Processor p = req[k];
-                        r.Append($@"{k + 1}) {p.Tag} ({p.Width}, {p.Height})");
-                    }
-
-                    r.Append('.');
-
-                    return r.ToString();
-                }, Logger.LogLevel.DEBUG, true);
-
-                List<SearchResults> results = new List<SearchResults>(pq1.Select(p => p.GetEqual(req)));
-
-                if (results.Count != 9)
-                    throw new InvalidOperationException($@"{nameof(BuildField)}: {nameof(results)} не равно 9: {results.Count}");
-
-                int[,] sessionCopy = new int[3, 3];
-
-                for (int k = 0; k < 9; k++)
-                {
-                    ProcPerc pp = results[k][0, 0];
-
-                    Processor[] pps = pp.Procs;
-                    char rTag = pps[0].Tag[0];
-
-                    for (int kp = 1; kp < pps.Length; kp++)
-                    {
-                        if (rTag != 'E')
-                        {
-                            char c = pps[kp].Tag[0];
-                            if (rTag != c && c != 'E')
-                                throw new ArgumentException(
-                                    $@"{nameof(BuildField)}: Неоднозначность ({pps.Length}) => ({pps[0].Tag} <==> {pps[kp].Tag}), клетка номер {k} (с нуля).");
-                            continue;
-                        }
-
-                        rTag = pps[kp].Tag[0];
-                    }
-
-                    int x = k % 3;
-                    int y = k / 3;
-
-                    switch (rTag)
-                    {
-                        case 'X':
-                            sessionCopy[x, y] = GameSession.IsGameCompetitorsInverted ? GameSession.BotHit : GameSession.UserHit;
-                            break;
-
-                        case 'O':
-                            sessionCopy[x, y] = GameSession.IsGameCompetitorsInverted ? GameSession.UserHit : GameSession.BotHit;
-                            break;
-
-                        case 'E':
-                            sessionCopy[x, y] = GameSession.EmptyHit;
-                            break;
-
-                        default:
-                            throw new Exception($@"{nameof(BuildField)}: ");
-                    }
+                    r.AppendLine();
+                    Processor p = req[k];
+                    r.Append($@"{k + 1}) {p.Tag} ({p.Width}, {p.Height})");
                 }
 
-                Logger.WriteLog(() => $@"{nameof(BuildField)}: Игровое поле собрано ->{Environment.NewLine}{GameSession.ArrayVisualize(sessionCopy)}.", Logger.LogLevel.DEBUG);
+                r.Append('.');
 
-                return sessionCopy;
+                return r.ToString();
+            }, Logger.LogLevel.DEBUG, true);
+
+            List<SearchResults> results = new List<SearchResults>(pFromScreen.Select(p => p.GetEqual(req)));
+
+            if (results.Count != 9)
+                throw new InvalidOperationException($@"{nameof(BuildField)}: {nameof(results)} не равно 9: {results.Count}.");
+
+            GameSession.GameFieldHit[,] sessionCopy = new GameSession.GameFieldHit[3, 3];
+
+            #endregion
+
+            for (int k = 0; k < 9; k++)
+            {
+                #region Block3
+
+                ProcPerc pp = results[k][0, 0];
+
+                Processor[] pps = pp.Procs;
+                char rTag = pps[0].Tag[0];
+
+                for (int kp = 1; kp < pps.Length; kp++)
+                {
+                    if (rTag != 'E')
+                    {
+                        char c = pps[kp].Tag[0];
+                        if (rTag != c && c != 'E')
+                            throw new ArgumentException(
+                                $@"{nameof(BuildField)}: Неоднозначность ({pps.Length}) => ({pps[0].Tag} <==> {pps[kp].Tag}), клетка номер {k} (с нуля).");
+                        continue;
+                    }
+
+                    rTag = pps[kp].Tag[0];
+                }
+
+                #endregion
+
+                #region Block4
+
+                int x = k % 3;
+                int y = k / 3;
+
+                switch (rTag)
+                {
+                    case 'X':
+                        sessionCopy[x, y] = GameSession.IsGameCompetitorsInverted ? GameSession.GameFieldHit.BOT : GameSession.GameFieldHit.USER;
+                        break;
+
+                    case 'O':
+                        sessionCopy[x, y] = GameSession.IsGameCompetitorsInverted ? GameSession.GameFieldHit.USER : GameSession.GameFieldHit.BOT;
+                        break;
+
+                    case 'E':
+                        sessionCopy[x, y] = GameSession.GameFieldHit.EMPTY;
+                        break;
+
+                    default:
+                        throw new Exception($@"{nameof(BuildField)}: Неизвестная карта ({rTag}).");
+                }
+
+                #endregion
             }
+
+            Logger.WriteLog(() => $@"{nameof(BuildField)}: Игровое поле собрано ->{Environment.NewLine}{GameSession.ArrayVisualize(sessionCopy)}.", Logger.LogLevel.DEBUG);
+
+            return sessionCopy;
         }
 
         void DoPhysicalHit(int x, int y)
@@ -1123,47 +1392,63 @@ namespace DynamicSample
         {
             try
             {
-                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)} Запуск бота...");
+                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Запуск бота...", Logger.LogLevel.DEBUG);
 
                 Dictionary<Size, (BitImages, ProcessorHandler)> pcs = GetEventClickHandlers();
                 ProcessorContainer req = ProcessorContainerFromSettings;
-                HitCounter hc = _selectedProfileSettings.StartHitCounter;
+                GameSession gameSession = new GameSession();
+                GameSession.ResetGameData();
 
-                DoClickActions(pcs);
+                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Бот запущен.");
 
-                GameSession gameSession = null;
+                if (DoClickActions(pcs))
+                    Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Нажимаю сброс перед началом игры.", Logger.LogLevel.DEBUG);
+                else
+                    Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Нажимать сброс перед началом игры не требуется.", Logger.LogLevel.DEBUG);
 
-                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)} Бот запущен.");
-
-                while (true)
+                while (IsBotActivated)
                 {
-                    int[,] sessionCopy = BuildField(req);
+                    #region Block1
 
-                    GameHandler(sessionCopy, ref gameSession, pcs, hc);
+                    GameSession.GameFieldHit[,] sessionCopy = BuildField(req);
 
-                    if (!(sessionCopy is null) || DoClickActions(pcs))
+                    #endregion
+
+                    #region Block2
+
+                    if (!(sessionCopy is null))
+                    {
+                        GameHandler(sessionCopy, gameSession, pcs);
+                        continue;
+                    }
+
+                    #endregion
+
+                    #region Block3
+
+                    if (DoClickActions(pcs))
                         continue;
 
-                    Logger.WriteLog(() => $@"{nameof(GameThreadFunction)} Не могу обработать ситуацию.", Logger.LogLevel.ERROR);
-                    break;
+                    #endregion
+
+                    #region Block4
+
+                    Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Не могу обработать ситуацию.", Logger.LogLevel.ERROR);
+                    throw new Exception(@"Не могу обработать ситуацию.");
+
+                    #endregion
                 }
-            }
-            catch (ThreadAbortException ex)
-            {
-                ResetAbort();
-                Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: Бот останавливается. ({ex.Message})");
             }
             catch (Exception ex)
             {
                 Logger.WriteLog(() => $@"{nameof(GameThreadFunction)}: {ex.Message}", Logger.LogLevel.ERROR);
-                SafeExecute(() => MessageBox.Show(this, ex.Message, @"Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error), true);
+                SafeExecute(() => MessageBox.Show(this, $@"Возникла ошибка. Бот будет остановлен.{Environment.NewLine}См. лог.", @"Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error), true);
             }
             finally
             {
                 try
                 {
-                    GameBotThread = null;
-
                     if (!ProgramStopFlag)
                     {
                         BeginInvoke(new Action(() => SafeExecute(() =>
@@ -1205,19 +1490,39 @@ namespace DynamicSample
 
         bool DoClickActions(IDictionary<Size, (BitImages, ProcessorHandler)> ps)
         {
+            #region Block1
+
             if (ps is null)
             {
                 Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Контейнер равен null.", Logger.LogLevel.ERROR);
                 return false;
             }
 
+            if (!ps.Any())
+            {
+                Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Контейнер пустой.", Logger.LogLevel.DEBUG);
+                return false;
+            }
+
+            #endregion
+
+            #region Block2
+
             Bitmap fullFrameNow = TakeScreenshot();
+
+            #endregion
+
+            #region Block3
 
             if (fullFrameNow is null)
             {
                 Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Не могу получить снимок экрана.", Logger.LogLevel.ERROR);
                 return false;
             }
+
+            #endregion
+
+            #region Block4
 
             foreach (BitImages bi in _selectedProfileSettings.EventClicks)
             {
@@ -1247,6 +1552,8 @@ namespace DynamicSample
 
             Logger.WriteLog(() => $@"{nameof(DoClickActions)}: Какие-либо действия выполнять не требуется.", Logger.LogLevel.DEBUG);
             return false;
+
+            #endregion
         }
 
         Dictionary<Size, (BitImages, ProcessorHandler)> GetEventClickHandlers()
@@ -1301,7 +1608,8 @@ namespace DynamicSample
                 return false;
             }
 
-            rt.Abort();
+            IsBotActivated = false;
+
             rt.Join();
 
             Logger.WriteLog(() => $@"{nameof(StopGameBotThread)}: Рабочий поток бота завершён.", Logger.LogLevel.DEBUG);
@@ -1407,6 +1715,8 @@ namespace DynamicSample
                         IsBackground = true,
                         Name = @"GameThread"
                     };
+
+                    IsBotActivated = true;
 
                     t.Start();
 
@@ -1574,20 +1884,31 @@ namespace DynamicSample
             {
                 if (cbxProfiles.SelectedIndex < 1)
                 {
+                    Logger.WriteLog(() => $@"{nameof(CbxProfiles_SelectedIndexChanged)}: Выбрана опция создания нового профиля.");
+
                     _selectedProfileSettings = new SettingsProfilesArray.HitSettings();
+                    _profileSettings.SelectedProfileIndex = -1;
                     _needSaveProfile = false;
                     return;
                 }
 
                 if (!_profileSettings.Profiles.Any())
+                {
+                    Logger.WriteLog(() => $@"{nameof(CbxProfiles_SelectedIndexChanged)}: Выбрана позиция {cbxProfiles.SelectedIndex}, при этом, профилей в хранилище нет.", Logger.LogLevel.ERROR);
                     return;
+                }
 
-                _selectedProfileSettings = _profileSettings.Profiles[cbxProfiles.SelectedIndex - 1];
+                Logger.WriteLog(() => $@"{nameof(CbxProfiles_SelectedIndexChanged)}: Выбран профиль номер {cbxProfiles.SelectedIndex}.");
+
+                int si = cbxProfiles.SelectedIndex - 1;
+                _selectedProfileSettings = _profileSettings.Profiles[si];
+                _profileSettings.SelectedProfileIndex = si;
                 _needSaveProfile = false;
                 btnGameStart.Enabled = true;
             }
             catch (Exception ex)
             {
+                Logger.WriteLog(() => $@"{nameof(CbxProfiles_SelectedIndexChanged)}: Исключение ""{ex.Message}""", Logger.LogLevel.ERROR);
                 MessageBox.Show(this, ex.Message, @"Ошибка");
             }
         }
